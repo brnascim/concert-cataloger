@@ -33,12 +33,18 @@ export function FileUploadZone({ onFilesLoaded }: FileUploadZoneProps) {
     const loaded: UploadedFile[] = [];
 
     for (const file of files) {
-      const content = await file.text();
-      loaded.push({
-        name: file.name,
-        content,
-        type: file.type || 'text/plain',
-      });
+      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xlsm');
+      if (isExcel) {
+        // Read as binary string for xlsx library
+        const buffer = await file.arrayBuffer();
+        const binary = Array.from(new Uint8Array(buffer))
+          .map(b => String.fromCharCode(b))
+          .join('');
+        loaded.push({ name: file.name, content: binary, type: file.type || 'application/octet-stream' });
+      } else {
+        const content = await file.text();
+        loaded.push({ name: file.name, content, type: file.type || 'text/plain' });
+      }
     }
 
     onFilesLoaded(loaded);
