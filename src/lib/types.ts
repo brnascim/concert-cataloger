@@ -1,0 +1,41 @@
+export interface ShowEntry {
+  artist: string;
+  date: string;
+  territory: string;
+  city: string;
+  venue: string;
+  venueAddress: string;
+  prsVenueId: string;
+  localPromoterContactInfo: string;
+  comments: string;
+  setListNumber: number;
+  headlinerYN: string;
+  headlinerIfN: string;
+}
+
+export interface SongEntry {
+  songTitle: string;
+  composers: string;
+  bmgControl: string;
+  iMaestroSongCode: string;
+  prsTunecode: string;
+  comments: string;
+}
+
+export interface SetlistData {
+  number: number;
+  songs: SongEntry[];
+}
+
+export interface ProcessedData {
+  shows: ShowEntry[];
+  setlists: SetlistData[];
+  alerts: string[];
+  filesProcessed: number;
+}
+
+export interface UploadedFile {
+  name: string;
+  content: string;
+  type: string;
+}
