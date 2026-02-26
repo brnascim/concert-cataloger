@@ -1,4 +1,6 @@
 import type { ProcessedData, ShowEntry, SongEntry, SetlistData, UploadedFile } from './types';
+import { normalizeText, normalizeDate } from './normalizer';
+import { parseXlsxContent } from './xlsxParser';
 
 const TERRITORY_MAP: Record<string, string> = {
   'uk': 'UK', 'united kingdom': 'UK', 'england': 'UK', 'scotland': 'UK', 'wales': 'UK',
@@ -21,7 +23,7 @@ function inferTerritory(text: string): string {
 }
 
 function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[]; setlists: SetlistData[]; alerts: string[] } {
-  const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+  const lines = normalizeText(content).split('\n').map(l => l.trim()).filter(Boolean);
   const shows: ShowEntry[] = [];
   const alerts: string[] = [];
   const songsMap: Map<string, SongEntry[]> = new Map();
@@ -173,15 +175,7 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
   return { shows, setlists, alerts };
 }
 
-function normalizeDate(raw: string): string {
-  const parts = raw.replace(/[\-\.]/g, '/').split('/');
-  if (parts.length === 3) {
-    const [d, m, y] = parts;
-    const year = y.length === 2 ? `20${y}` : y;
-    return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${year}`;
-  }
-  return raw;
-}
+// normalizeDate is now imported from ./normalizer
 
 export function processFiles(files: UploadedFile[]): ProcessedData {
   const allShows: ShowEntry[] = [];
@@ -190,9 +184,22 @@ export function processFiles(files: UploadedFile[]): ProcessedData {
   let setlistOffset = 0;
 
   for (const file of files) {
-    if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.rtf') || file.name.endsWith('.csv')) {
+    const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xlsm');
+
+    if (isXlsx) {
+      const result = parseXlsxContent(file.content, file.name);
+      for (const show of result.shows) {
+        show.setListNumber += setlistOffset;
+        allShows.push(show);
+      }
+      for (const sl of result.setlists) {
+        sl.number += setlistOffset;
+        allSetlists.push(sl);
+      }
+      setlistOffset += result.setlists.length;
+      allAlerts.push(...result.alerts);
+    } else if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.rtf') || file.name.endsWith('.csv')) {
       const result = parseTxtContent(file.content, file.name);
-      // Offset setlist numbers
       for (const show of result.shows) {
         show.setListNumber += setlistOffset;
         allShows.push(show);
@@ -205,7 +212,6 @@ export function processFiles(files: UploadedFile[]): ProcessedData {
       allAlerts.push(...result.alerts);
     } else {
       allAlerts.push(`[${file.name}]: Formato "${file.type}" — processamento limitado a texto extraído. Para DOCX/PDF completo, converta para TXT.`);
-      // Still try to parse as text
       const result = parseTxtContent(file.content, file.name);
       for (const show of result.shows) {
         show.setListNumber += setlistOffset;
