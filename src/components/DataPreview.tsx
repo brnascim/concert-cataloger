@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Wrench } from 'lucide-react';
 import type { ProcessedData } from '@/lib/types';
 import { exportToExcel } from '@/lib/exporter';
 import { exportToCsv } from '@/lib/csvExporter';
+import { sanitizeData, type SanitizationReport } from '@/lib/sanitizer';
 import { useI18n } from '@/lib/i18n';
 
 interface DataPreviewProps {
@@ -11,12 +12,23 @@ interface DataPreviewProps {
 
 export function DataPreview({ data }: DataPreviewProps) {
   const [activeTab, setActiveTab] = useState<string>('venues');
+  const [showSanitization, setShowSanitization] = useState(false);
+  const [showQuality, setShowQuality] = useState(false);
   const { t } = useI18n();
-  const totalSongs = data.setlists.reduce((sum, sl) => sum + sl.songs.length, 0);
+
+  // Run sanitization pipeline
+  const { data: sanitized, report } = useMemo(() => sanitizeData(data), [data]);
+
+  const totalSongs = sanitized.setlists.reduce((sum, sl) => sum + sl.songs.length, 0);
+  const totalCorrections = report.correction1_dateInArtist + report.correction1_tourInArtist +
+    report.correction2_venueInDate + report.correction3_metadataPropagated +
+    report.correction4_duplicatesRemoved + report.correction5_bmgNormalized +
+    report.correction6_datesNormalized + report.correction7_cancelledShows +
+    report.correction8_djBpmExtracted;
 
   const tabs = [
     { id: 'venues', label: 'Dates & Venues', icon: Calendar },
-    ...data.setlists.map(sl => ({
+    ...sanitized.setlists.map(sl => ({
       id: `setlist-${sl.number}`,
       label: `Set List ${sl.number}`,
       icon: Music,
@@ -37,8 +49,8 @@ export function DataPreview({ data }: DataPreviewProps) {
           <StatWithIcon label={t('totalFailure')} value={data.filesWithFailures} icon={<XCircle className="h-3.5 w-3.5 text-destructive" />} />
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3 pt-3 border-t border-border">
-          <Stat label={t('showsExtracted')} value={data.shows.length} />
-          <Stat label={t('setlistsCreated')} value={data.setlists.length} />
+          <Stat label={t('showsExtracted')} value={sanitized.shows.length} />
+          <Stat label={t('setlistsCreated')} value={sanitized.setlists.length} />
           <Stat label={t('totalSongs')} value={totalSongs} />
           <StatWithIcon label={t('rejectedLines')} value={data.rejectedLines} icon={<Ban className="h-3.5 w-3.5 text-muted-foreground" />} />
         </div>
@@ -54,6 +66,41 @@ export function DataPreview({ data }: DataPreviewProps) {
           </div>
         )}
       </div>
+
+      {/* Sanitization Report */}
+      {totalCorrections > 0 && (
+        <div className="rounded-lg bg-card border border-border p-5">
+          <button
+            onClick={() => setShowSanitization(!showSanitization)}
+            className="w-full flex items-center justify-between text-sm font-semibold text-primary uppercase tracking-wider"
+          >
+            <span className="flex items-center gap-2">
+              <Wrench className="h-4 w-4" />
+              {t('sanitizationTitle')} ({totalCorrections})
+            </span>
+            {showSanitization ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {showSanitization && (
+            <SanitizationDetails report={report} />
+          )}
+        </div>
+      )}
+
+      {/* Quality Report */}
+      {report.artistQuality.length > 0 && (
+        <div className="rounded-lg bg-card border border-border p-5">
+          <button
+            onClick={() => setShowQuality(!showQuality)}
+            className="w-full flex items-center justify-between text-sm font-semibold text-primary uppercase tracking-wider"
+          >
+            <span>{t('qualityTitle')}</span>
+            {showQuality ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {showQuality && (
+            <QualityTable artists={report.artistQuality} />
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 overflow-x-auto rounded-lg bg-secondary p-1">
@@ -75,8 +122,8 @@ export function DataPreview({ data }: DataPreviewProps) {
 
       {/* Table Content */}
       <div className="rounded-lg border border-border overflow-hidden">
-        {activeTab === 'venues' && <VenuesTable shows={data.shows} />}
-        {data.setlists.map(sl =>
+        {activeTab === 'venues' && <VenuesTable shows={sanitized.shows} />}
+        {sanitized.setlists.map(sl =>
           activeTab === `setlist-${sl.number}` ? (
             <SetlistTable key={sl.number} songs={sl.songs} />
           ) : null
@@ -86,20 +133,85 @@ export function DataPreview({ data }: DataPreviewProps) {
       {/* Export Buttons */}
       <div className="flex gap-3 flex-wrap">
         <button
-          onClick={() => exportToExcel(data)}
+          onClick={() => exportToExcel(sanitized)}
           className="flex items-center gap-2 rounded-md gradient-primary px-5 py-3 font-semibold text-primary-foreground transition-all hover:opacity-90 glow-amber"
         >
           <Download className="h-4 w-4" />
           {t('exportExcel')}
         </button>
         <button
-          onClick={() => exportToCsv(data)}
+          onClick={() => exportToCsv(sanitized)}
           className="flex items-center gap-2 rounded-md bg-secondary px-5 py-3 font-semibold text-secondary-foreground transition-all hover:opacity-90 border border-border"
         >
           <Download className="h-4 w-4" />
           {t('exportCsv')}
         </button>
       </div>
+    </div>
+  );
+}
+
+function SanitizationDetails({ report }: { report: SanitizationReport }) {
+  const items = [
+    { label: 'Date/tour in Artist field', value: report.correction1_dateInArtist + report.correction1_tourInArtist },
+    { label: 'Venue in Date field', value: report.correction2_venueInDate },
+    { label: 'Metadata propagated', value: report.correction3_metadataPropagated },
+    { label: 'Duplicates removed', value: report.correction4_duplicatesRemoved },
+    { label: 'BMG Control normalized', value: report.correction5_bmgNormalized },
+    { label: 'Dates normalized', value: report.correction6_datesNormalized },
+    { label: 'Cancelled shows flagged', value: report.correction7_cancelledShows },
+    { label: 'DJ BPM/Key extracted', value: report.correction8_djBpmExtracted },
+  ].filter(i => i.value > 0);
+
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {items.map(item => (
+        <div key={item.label} className="rounded bg-secondary p-2">
+          <p className="text-lg font-bold text-foreground">{item.value}</p>
+          <p className="text-xs text-muted-foreground">{item.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function QualityTable({ artists }: { artists: { artist: string; totalLines: number; datePercent: number; cityPercent: number; venuePercent: number; composerPercent: number; bmgPercent: number; avgScore: number }[] }) {
+  const top = artists.slice(0, 20);
+  const pctCell = (val: number) => (
+    <span className={val >= 80 ? 'text-success' : val >= 50 ? 'text-warning' : 'text-destructive'}>
+      {val}%
+    </span>
+  );
+
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-table-header">
+            {['Artist', 'Lines', 'Date%', 'City%', 'Venue%', 'Composer%', 'BMG%', 'Score'].map(c => (
+              <th key={c} className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground uppercase">{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {top.map((a, i) => (
+            <tr key={a.artist} className={i % 2 === 1 ? 'bg-table-row-alt' : ''}>
+              <td className="px-3 py-2 font-medium text-foreground truncate max-w-[200px]">{a.artist}</td>
+              <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{a.totalLines}</td>
+              <td className="px-3 py-2 font-mono text-xs">{pctCell(a.datePercent)}</td>
+              <td className="px-3 py-2 font-mono text-xs">{pctCell(a.cityPercent)}</td>
+              <td className="px-3 py-2 font-mono text-xs">{pctCell(a.venuePercent)}</td>
+              <td className="px-3 py-2 font-mono text-xs">{pctCell(a.composerPercent)}</td>
+              <td className="px-3 py-2 font-mono text-xs">{pctCell(a.bmgPercent)}</td>
+              <td className="px-3 py-2 font-mono text-xs font-bold">
+                <span className={a.avgScore >= 75 ? 'text-success' : a.avgScore >= 50 ? 'text-warning' : 'text-destructive'}>
+                  {a.avgScore}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
