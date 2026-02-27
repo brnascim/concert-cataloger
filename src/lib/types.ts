@@ -27,11 +27,24 @@ export interface SetlistData {
   songs: SongEntry[];
 }
 
+export interface FileStatus {
+  name: string;
+  status: 'success' | 'alert' | 'failure';
+  method?: string;
+  alerts: string[];
+  rejectedLines: number;
+}
+
 export interface ProcessedData {
   shows: ShowEntry[];
   setlists: SetlistData[];
   alerts: string[];
   filesProcessed: number;
+  filesSuccess: number;
+  filesWithAlerts: number;
+  filesWithFailures: number;
+  rejectedLines: number;
+  fileStatuses: FileStatus[];
 }
 
 export interface UploadedFile {

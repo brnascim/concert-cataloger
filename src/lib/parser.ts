@@ -1,4 +1,5 @@
-import type { ProcessedData, ShowEntry, SongEntry, SetlistData, UploadedFile } from './types';
+import type { ProcessedData, ShowEntry, SongEntry, SetlistData, UploadedFile, FileStatus } from './types';
+import { isValidShow, isValidSongTitle } from './validator';
 import { normalizeText, normalizeDate } from './normalizer';
 import { parseXlsxContent } from './xlsxParser';
 
@@ -181,49 +182,72 @@ export function processFiles(files: UploadedFile[]): ProcessedData {
   const allShows: ShowEntry[] = [];
   const allSetlists: SetlistData[] = [];
   const allAlerts: string[] = [];
+  const fileStatuses: FileStatus[] = [];
   let setlistOffset = 0;
+  let totalRejectedLines = 0;
 
   for (const file of files) {
     const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xlsm');
+    let result: { shows: ShowEntry[]; setlists: SetlistData[]; alerts: string[] };
 
-    if (isXlsx) {
-      const result = parseXlsxContent(file.content, file.name);
-      for (const show of result.shows) {
-        show.setListNumber += setlistOffset;
-        allShows.push(show);
+    try {
+      if (isXlsx) {
+        result = parseXlsxContent(file.content, file.name);
+      } else {
+        result = parseTxtContent(file.content, file.name);
       }
-      for (const sl of result.setlists) {
-        sl.number += setlistOffset;
-        allSetlists.push(sl);
-      }
-      setlistOffset += result.setlists.length;
-      allAlerts.push(...result.alerts);
-    } else if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.rtf') || file.name.endsWith('.csv')) {
-      const result = parseTxtContent(file.content, file.name);
-      for (const show of result.shows) {
-        show.setListNumber += setlistOffset;
-        allShows.push(show);
-      }
-      for (const sl of result.setlists) {
-        sl.number += setlistOffset;
-        allSetlists.push(sl);
-      }
-      setlistOffset += result.setlists.length;
-      allAlerts.push(...result.alerts);
-    } else {
-      allAlerts.push(`[${file.name}]: Formato "${file.type}" — processamento limitado a texto extraído. Para DOCX/PDF completo, converta para TXT.`);
-      const result = parseTxtContent(file.content, file.name);
-      for (const show of result.shows) {
-        show.setListNumber += setlistOffset;
-        allShows.push(show);
-      }
-      for (const sl of result.setlists) {
-        sl.number += setlistOffset;
-        allSetlists.push(sl);
-      }
-      setlistOffset += result.setlists.length;
-      allAlerts.push(...result.alerts);
+    } catch (e) {
+      const msg = `[${file.name}]: Falha total ao processar — ${e instanceof Error ? e.message : String(e)}`;
+      allAlerts.push(msg);
+      fileStatuses.push({ name: file.name, status: 'failure', alerts: [msg], rejectedLines: 0 });
+      continue;
     }
+
+    // Validate shows — reject empty lines
+    let rejectedShows = 0;
+    const validShows: ShowEntry[] = [];
+    for (const show of result.shows) {
+      if (isValidShow(show)) {
+        show.setListNumber += setlistOffset;
+        validShows.push(show);
+      } else {
+        rejectedShows++;
+      }
+    }
+
+    // Validate setlist songs — reject invalid titles
+    let rejectedSongs = 0;
+    const validSetlists: SetlistData[] = [];
+    for (const sl of result.setlists) {
+      const validSongs = sl.songs.filter(s => {
+        if (isValidSongTitle(s.songTitle)) return true;
+        rejectedSongs++;
+        return false;
+      });
+      if (validSongs.length > 0) {
+        validSetlists.push({ number: sl.number + setlistOffset, songs: validSongs });
+      }
+    }
+
+    const fileRejected = rejectedShows + rejectedSongs;
+    totalRejectedLines += fileRejected;
+
+    allShows.push(...validShows);
+    allSetlists.push(...validSetlists);
+    setlistOffset += validSetlists.length;
+    allAlerts.push(...result.alerts);
+
+    if (fileRejected > 0) {
+      allAlerts.push(`[${file.name}]: ${fileRejected} linhas rejeitadas (campos obrigatórios ausentes ou corrompidos).`);
+    }
+
+    const hasAlerts = result.alerts.length > 0 || fileRejected > 0;
+    fileStatuses.push({
+      name: file.name,
+      status: hasAlerts ? 'alert' : 'success',
+      alerts: result.alerts,
+      rejectedLines: fileRejected,
+    });
   }
 
   if (allShows.length === 0 && files.length > 0) {
@@ -235,5 +259,10 @@ export function processFiles(files: UploadedFile[]): ProcessedData {
     setlists: allSetlists,
     alerts: allAlerts,
     filesProcessed: files.length,
+    filesSuccess: fileStatuses.filter(f => f.status === 'success').length,
+    filesWithAlerts: fileStatuses.filter(f => f.status === 'alert').length,
+    filesWithFailures: fileStatuses.filter(f => f.status === 'failure').length,
+    rejectedLines: totalRejectedLines,
+    fileStatuses,
   };
 }
