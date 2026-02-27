@@ -2,26 +2,7 @@ import type { ProcessedData, ShowEntry, SongEntry, SetlistData, UploadedFile, Fi
 import { isValidShow, isValidSongTitle } from './validator';
 import { normalizeText, normalizeDate } from './normalizer';
 import { parseXlsxContentAsync } from './xlsxParser';
-
-const TERRITORY_MAP: Record<string, string> = {
-  'uk': 'UK', 'united kingdom': 'UK', 'england': 'UK', 'scotland': 'UK', 'wales': 'UK',
-  'usa': 'USA', 'united states': 'USA', 'us': 'USA',
-  'brazil': 'BRA', 'brasil': 'BRA',
-  'japan': 'JPN', 'china': 'CHN',
-  'france': 'EU', 'germany': 'EU', 'spain': 'EU', 'italy': 'EU', 'netherlands': 'EU',
-  'belgium': 'EU', 'portugal': 'EU', 'austria': 'EU', 'switzerland': 'EU',
-  'sweden': 'EU', 'norway': 'EU', 'denmark': 'EU', 'finland': 'EU',
-  'poland': 'EU', 'czech republic': 'EU', 'hungary': 'EU',
-  'australia': 'AUS', 'canada': 'CAN', 'mexico': 'MEX',
-};
-
-function inferTerritory(text: string): string {
-  const lower = text.toLowerCase();
-  for (const [key, val] of Object.entries(TERRITORY_MAP)) {
-    if (lower.includes(key)) return val;
-  }
-  return '';
-}
+import { inferTerritory, inferTerritoryFromComment } from './territory';
 
 function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[]; setlists: SetlistData[]; alerts: string[] } {
   const lines = normalizeText(content).split('\n').map(l => l.trim()).filter(Boolean);

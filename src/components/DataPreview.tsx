@@ -24,7 +24,7 @@ export function DataPreview({ data }: DataPreviewProps) {
     report.correction2_venueInDate + report.correction3_metadataPropagated +
     report.correction4_duplicatesRemoved + report.correction5_bmgNormalized +
     report.correction6_datesNormalized + report.correction7_cancelledShows +
-    report.correction8_djBpmExtracted;
+    report.correction8_djBpmExtracted + report.correction9_territoryInferred;
 
   const tabs = [
     { id: 'venues', label: 'Dates & Venues', icon: Calendar },
@@ -161,6 +161,7 @@ function SanitizationDetails({ report }: { report: SanitizationReport }) {
     { label: 'Dates normalized', value: report.correction6_datesNormalized },
     { label: 'Cancelled shows flagged', value: report.correction7_cancelledShows },
     { label: 'DJ BPM/Key extracted', value: report.correction8_djBpmExtracted },
+    { label: 'Territory inferred from comments', value: report.correction9_territoryInferred },
   ].filter(i => i.value > 0);
 
   return (
