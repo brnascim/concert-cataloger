@@ -7,6 +7,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/integrations/supabase/client';
 import { useI18n } from '@/lib/i18n';
+import { fuzzySearch, findVariants, type FuzzyResult } from '@/lib/fuzzySearch';
+import { calculateConfidence, type ConfidenceLevel } from '@/lib/confidence';
 
 interface SearchResult {
   artist: string;
@@ -25,15 +27,50 @@ interface SearchResult {
   prs_tunecode: string;
   song_comments: string;
   status: string;
+  _confidence_score?: number;
+  _confidence_level?: ConfidenceLevel;
 }
 
 const ALL_COLUMNS = [
   'artist', 'date', 'territory', 'city', 'venue', 'set_list_number',
   'ordem', 'song_title', 'composers', 'bmg_control', 'imaestro_code',
-  'prs_tunecode', 'headliner_yn', 'status',
+  'prs_tunecode', 'headliner_yn', 'status', '_confidence_score',
 ] as const;
 
 type SortDir = 'asc' | 'desc';
+
+// Confidence badge component (M18)
+function ConfidenceBadge({ score, level }: { score: number; level: ConfidenceLevel }) {
+  const styles: Record<ConfidenceLevel, string> = {
+    HIGH: 'bg-success/15 text-success',
+    MEDIUM: 'bg-warning/15 text-warning',
+    LOW: 'bg-destructive/15 text-destructive',
+  };
+  const labels: Record<ConfidenceLevel, string> = { HIGH: 'High', MEDIUM: 'Med', LOW: 'Low' };
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold ${styles[level]}`}
+      title={`Confidence: ${score}/100`}
+    >
+      {labels[level]} {score}
+    </span>
+  );
+}
+
+// Fuzzy variants alert (M17)
+function FuzzyAlert({ query, variants }: { query: string; variants: string[] }) {
+  if (variants.length === 0) return null;
+  return (
+    <div className="rounded-md bg-warning/10 border border-warning/30 px-3 py-2 text-sm text-secondary-foreground mb-3">
+      🔍 Showing results for: <strong>{query}</strong>
+      {' — also including similar: '}
+      {variants.map(v => (
+        <span key={v} className="inline-block bg-warning/20 text-primary rounded px-1.5 py-0.5 text-xs font-semibold ml-1">{v}</span>
+      ))}
+    </div>
+  );
+}
 
 export default function SearchPage() {
   const { t } = useI18n();
@@ -57,6 +94,11 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   
+  // Fuzzy variants
+  const [artistVariants, setArtistVariants] = useState<string[]>([]);
+  const [songVariants, setSongVariants] = useState<string[]>([]);
+  const [composerVariants, setComposerVariants] = useState<string[]>([]);
+  
   // Table state
   const [page, setPage] = useState(0);
   const [perPage, setPerPage] = useState(25);
@@ -64,13 +106,20 @@ export default function SearchPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set(ALL_COLUMNS));
-  const [searchTerm, setSearchTerm] = useState(''); // for highlighting
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchResults = async () => {
     setLoading(true);
     setPage(0);
     setSelectedRows(new Set());
     setSearchTerm(song || artist);
+    setArtistVariants([]);
+    setSongVariants([]);
+    setComposerVariants([]);
+
+    // iMaestro Code: ALWAYS exact match (M17 rule)
+    // PRS Tunecode: exact match
+    // Territory, BMG, Headliner, Status: exact match
 
     // Build query joining shows and setlists
     let query = supabase
@@ -79,13 +128,16 @@ export default function SearchPage() {
         artist, date, territory, city, venue, headliner_yn, set_list_number, comments, status, processamento_id
       `, { count: 'exact' });
 
-    if (artist) query = query.ilike('artist', `%${artist}%`);
+    // Exact filters applied at DB level
     if (dateFrom) query = query.gte('date', dateFrom);
     if (dateTo) query = query.lte('date', dateTo);
     if (territory) query = query.eq('territory', territory);
-    if (city) query = query.ilike('city', `%${city}%`);
     if (headliner === 'Y' || headliner === 'N') query = query.eq('headliner_yn', headliner);
     if (statusFilter) query = query.eq('status', statusFilter);
+
+    // For artist: use ilike for initial DB filter, then fuzzy in memory
+    if (artist) query = query.ilike('artist', `%${artist.substring(0, 3)}%`);
+    if (city) query = query.ilike('city', `%${city}%`);
 
     const { data: shows, count, error } = await query.order('date', { ascending: sortDir === 'asc' }).range(0, 999);
 
@@ -103,61 +155,61 @@ export default function SearchPage() {
     if (procIds.length > 0) {
       setlistQuery = setlistQuery.in('processamento_id', procIds);
     }
-    if (song) setlistQuery = setlistQuery.ilike('song_title', `%${song}%`);
-    if (composer) setlistQuery = setlistQuery.ilike('composers', `%${composer}%`);
+    // iMaestro: EXACT match (M17 rule - zero tolerance)
+    if (imaestroCode) setlistQuery = setlistQuery.eq('imaestro_code', imaestroCode.trim());
+    if (prsTunecode) setlistQuery = setlistQuery.eq('prs_tunecode', prsTunecode.trim());
     if (bmgControl === 'Y' || bmgControl === 'N') setlistQuery = setlistQuery.eq('bmg_control', bmgControl);
-    if (imaestroCode) setlistQuery = setlistQuery.ilike('imaestro_code', `%${imaestroCode}%`);
-    if (prsTunecode) setlistQuery = setlistQuery.ilike('prs_tunecode', `%${prsTunecode}%`);
 
     const { data: setlists } = await setlistQuery;
 
     // Join in memory
-    const joined: SearchResult[] = [];
+    let joined: SearchResult[] = [];
     for (const show of shows) {
       const matchingSongs = (setlists || []).filter(
         sl => sl.processamento_id === show.processamento_id && sl.set_list_number === show.set_list_number
       );
       if (matchingSongs.length === 0 && !song && !composer && !bmgControl && !imaestroCode && !prsTunecode) {
-        joined.push({
-          artist: show.artist,
-          date: show.date,
-          territory: show.territory || '',
-          city: show.city || '',
-          venue: show.venue || '',
-          headliner_yn: show.headliner_yn || '',
-          set_list_number: show.set_list_number || 0,
-          show_comments: show.comments || '',
-          ordem: 0,
-          song_title: '',
-          composers: '',
-          bmg_control: '',
-          imaestro_code: '',
-          prs_tunecode: '',
-          song_comments: '',
-          status: show.status,
-        });
+        joined.push(makeResult(show, null));
       } else {
         for (const sl of matchingSongs) {
-          joined.push({
-            artist: show.artist,
-            date: show.date,
-            territory: show.territory || '',
-            city: show.city || '',
-            venue: show.venue || '',
-            headliner_yn: show.headliner_yn || '',
-            set_list_number: show.set_list_number || 0,
-            show_comments: show.comments || '',
-            ordem: sl.ordem,
-            song_title: sl.song_title,
-            composers: sl.composers || '',
-            bmg_control: sl.bmg_control || '',
-            imaestro_code: sl.imaestro_code || '',
-            prs_tunecode: sl.prs_tunecode || '',
-            song_comments: sl.comments || '',
-            status: show.status,
-          });
+          joined.push(makeResult(show, sl));
         }
       }
+    }
+
+    // M17: Apply fuzzy search in memory for artist, song, composer
+    if (artist && joined.length > 0) {
+      const fuzzyResults = fuzzySearch(joined, r => r.artist, artist, { type: 'fuzzy', threshold: 60 });
+      setArtistVariants(findVariants(fuzzyResults, r => r.artist, artist));
+      joined = fuzzyResults.map(r => r.item);
+    }
+
+    if (song && joined.length > 0) {
+      const fuzzyResults = fuzzySearch(joined, r => r.song_title, song, { type: 'fuzzy', threshold: 65 });
+      setSongVariants(findVariants(fuzzyResults, r => r.song_title, song));
+      joined = fuzzyResults.map(r => r.item);
+    }
+
+    if (composer && joined.length > 0) {
+      const fuzzyResults = fuzzySearch(joined, r => r.composers, composer, { type: 'jaro_winkler', threshold: 78 });
+      setComposerVariants(findVariants(fuzzyResults, r => r.composers, composer));
+      joined = fuzzyResults.map(r => r.item);
+    }
+
+    // M18: Calculate confidence scores
+    for (const row of joined) {
+      const conf = calculateConfidence({
+        artist: row.artist,
+        date: row.date,
+        song_title: row.song_title,
+        city: row.city,
+        venue: row.venue,
+        territory: row.territory,
+        composers: row.composers,
+        bmg_control: row.bmg_control,
+      });
+      row._confidence_score = conf.score;
+      row._confidence_level = conf.level;
     }
 
     setResults(joined);
@@ -165,12 +217,34 @@ export default function SearchPage() {
     setLoading(false);
   };
 
+  function makeResult(show: any, sl: any): SearchResult {
+    return {
+      artist: show.artist,
+      date: show.date,
+      territory: show.territory || '',
+      city: show.city || '',
+      venue: show.venue || '',
+      headliner_yn: show.headliner_yn || '',
+      set_list_number: show.set_list_number || 0,
+      show_comments: show.comments || '',
+      ordem: sl?.ordem || 0,
+      song_title: sl?.song_title || '',
+      composers: sl?.composers || '',
+      bmg_control: sl?.bmg_control || '',
+      imaestro_code: sl?.imaestro_code || '',
+      prs_tunecode: sl?.prs_tunecode || '',
+      song_comments: sl?.comments || '',
+      status: show.status,
+    };
+  }
+
   const clearFilters = () => {
     setArtist(''); setSong(''); setDateFrom(''); setDateTo('');
     setTerritory(''); setCity(''); setComposer('');
     setBmgControl(''); setHeadliner(''); setImaestroCode('');
     setPrsTunecode(''); setStatusFilter('');
     setResults([]); setTotalCount(0); setSelectedRows(new Set());
+    setArtistVariants([]); setSongVariants([]); setComposerVariants([]);
   };
 
   // Sort
@@ -178,6 +252,9 @@ export default function SearchPage() {
     const sorted = [...results].sort((a, b) => {
       const av = (a as any)[sortCol] ?? '';
       const bv = (b as any)[sortCol] ?? '';
+      if (sortCol === '_confidence_score') {
+        return sortDir === 'asc' ? (Number(av) - Number(bv)) : (Number(bv) - Number(av));
+      }
       const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -223,10 +300,13 @@ export default function SearchPage() {
       ? [...selectedRows].map(i => sortedResults[i]).filter(Boolean)
       : sortedResults;
     
-    const headers = [...visibleCols];
+    const exportCols = [...visibleCols].filter(c => c !== '_confidence_score');
+    const headers = [...exportCols, 'confidence_score'];
     const csvRows = [headers.join(',')];
     for (const row of rows) {
-      csvRows.push(headers.map(h => `"${String((row as any)[h] || '').replace(/"/g, '""')}"`).join(','));
+      const vals = exportCols.map(h => `"${String((row as any)[h] || '').replace(/"/g, '""')}"`);
+      vals.push(String(row._confidence_score ?? ''));
+      csvRows.push(vals.join(','));
     }
     const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -244,7 +324,7 @@ export default function SearchPage() {
       ordem: '#', song_title: t('songTitle'), composers: t('composers'),
       bmg_control: t('bmgControl'), imaestro_code: t('imaestroCode'),
       prs_tunecode: t('prsTunecode'), headliner_yn: t('headliner'),
-      status: t('status'),
+      status: t('status'), _confidence_score: '🎯 Score',
     };
     return map[col] || col;
   };
@@ -258,13 +338,13 @@ export default function SearchPage() {
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <FilterField label={t('artist')}>
+          <FilterField label={`${t('artist')} 🔮`} hint="fuzzy">
             <Input value={artist} onChange={e => setArtist(e.target.value)} placeholder="ex: Bill Laurance" />
           </FilterField>
-          <FilterField label={t('songTitle')}>
+          <FilterField label={`${t('songTitle')} 🔮`} hint="fuzzy">
             <Input value={song} onChange={e => setSong(e.target.value)} placeholder="ex: Swag Times" />
           </FilterField>
-          <FilterField label={t('composers')}>
+          <FilterField label={`${t('composers')} 🔮`} hint="fuzzy">
             <Input value={composer} onChange={e => setComposer(e.target.value)} />
           </FilterField>
           <FilterField label={`${t('period')} (${t('from')})`}>
@@ -274,7 +354,15 @@ export default function SearchPage() {
             <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
           </FilterField>
           <FilterField label={t('territory')}>
-            <Input value={territory} onChange={e => setTerritory(e.target.value)} />
+            <Select value={territory} onValueChange={setTerritory}>
+              <SelectTrigger><SelectValue placeholder={t('all')} /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('all')}</SelectItem>
+                {['EU', 'UK', 'USA', 'BRA', 'JPN', 'CHN', 'AUS', 'LATAM', 'ASIA', 'INTL'].map(t => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </FilterField>
           <FilterField label={`${t('city')} / ${t('venue')}`}>
             <Input value={city} onChange={e => setCity(e.target.value)} />
@@ -299,11 +387,11 @@ export default function SearchPage() {
               </SelectContent>
             </Select>
           </FilterField>
-          <FilterField label={t('imaestroCode')}>
-            <Input value={imaestroCode} onChange={e => setImaestroCode(e.target.value)} />
+          <FilterField label={`${t('imaestroCode')} 🎯`} hint="exact">
+            <Input value={imaestroCode} onChange={e => setImaestroCode(e.target.value)} placeholder="Exact match" />
           </FilterField>
-          <FilterField label={t('prsTunecode')}>
-            <Input value={prsTunecode} onChange={e => setPrsTunecode(e.target.value)} />
+          <FilterField label={`${t('prsTunecode')} 🎯`} hint="exact">
+            <Input value={prsTunecode} onChange={e => setPrsTunecode(e.target.value)} placeholder="Exact match" />
           </FilterField>
           <FilterField label={t('status')}>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -327,6 +415,11 @@ export default function SearchPage() {
           </Button>
         </div>
       </div>
+
+      {/* Fuzzy variants alerts */}
+      {artist && artistVariants.length > 0 && <FuzzyAlert query={artist} variants={artistVariants} />}
+      {song && songVariants.length > 0 && <FuzzyAlert query={song} variants={songVariants} />}
+      {composer && composerVariants.length > 0 && <FuzzyAlert query={composer} variants={composerVariants} />}
 
       {/* Results */}
       {results.length > 0 && (
@@ -422,6 +515,8 @@ export default function SearchPage() {
                               <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                                 {(row as any)[col]}
                               </span>
+                            ) : col === '_confidence_score' ? (
+                              <ConfidenceBadge score={row._confidence_score ?? 0} level={row._confidence_level ?? 'LOW'} />
                             ) : (
                               <>{highlight(String((row as any)[col] || ''))}</>
                             )}
@@ -459,10 +554,19 @@ export default function SearchPage() {
   );
 }
 
-function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterField({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+        {label}
+        {hint && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+            hint === 'fuzzy' ? 'bg-warning/15 text-warning' : 'bg-primary/15 text-primary'
+          }`}>
+            {hint}
+          </span>
+        )}
+      </label>
       {children}
     </div>
   );

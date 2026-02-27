@@ -4,6 +4,7 @@
  */
 import type { ProcessedData, ShowEntry, SongEntry, SetlistData } from './types';
 import { normalizeDate } from './normalizer';
+import { inferTerritoryFromComment } from './territory';
 
 // ─── CORRECTION 1: Detect date or tour name in Artist field ──────────────
 
@@ -174,6 +175,7 @@ export interface SanitizationReport {
   correction6_datesNormalized: number;
   correction7_cancelledShows: number;
   correction8_djBpmExtracted: number;
+  correction9_territoryInferred: number;
   finalShowCount: number;
   finalSongCount: number;
   artistQuality: ArtistQualityReport[];
@@ -185,7 +187,8 @@ export function sanitizeData(data: ProcessedData): { data: ProcessedData; report
     correction2_venueInDate: 0, correction3_metadataPropagated: 0,
     correction4_duplicatesRemoved: 0, correction5_bmgNormalized: 0,
     correction6_datesNormalized: 0, correction7_cancelledShows: 0,
-    correction8_djBpmExtracted: 0, finalShowCount: 0, finalSongCount: 0,
+    correction8_djBpmExtracted: 0, correction9_territoryInferred: 0,
+    finalShowCount: 0, finalSongCount: 0,
     artistQuality: [],
   };
 
@@ -300,6 +303,15 @@ export function sanitizeData(data: ProcessedData): { data: ProcessedData; report
         song.comments = ((song.comments || '') + ` ${techNote}`).trim();
         report.correction8_djBpmExtracted++;
       }
+    }
+  }
+
+  // ── Correction 9: Infer territory from comments (M16) ──
+  for (const show of shows) {
+    const before = show.territory;
+    show.territory = inferTerritoryFromComment(show.comments, show.territory);
+    if (show.territory !== before && show.territory) {
+      report.correction9_territoryInferred++;
     }
   }
 
