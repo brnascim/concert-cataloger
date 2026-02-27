@@ -30,12 +30,49 @@ function classifySheet(name: string, headers: string[]): 'setlist' | 'dates' | '
   return 'unknown';
 }
 
+// M5: Fuzzy column name matching
+const TITLE_COLUMN_ALIASES = [
+  'song title', 'title', 'título', 'track', 'faixa', 'música',
+  'name', 'song', 'track name', 'track title', 'canção', 'werkname',
+];
+
+function fuzzyMatch(candidate: string, targets: string[], cutoff = 0.6): string | null {
+  const c = candidate.toLowerCase().trim();
+  // Exact substring match first
+  for (const t of targets) {
+    if (c.includes(t) || t.includes(c)) return t;
+  }
+  // Simple similarity based on shared characters
+  for (const t of targets) {
+    const longer = c.length > t.length ? c : t;
+    const shorter = c.length > t.length ? t : c;
+    let matches = 0;
+    for (let i = 0; i < shorter.length; i++) {
+      if (longer.includes(shorter[i])) matches++;
+    }
+    if (matches / longer.length >= cutoff) return t;
+  }
+  return null;
+}
+
 function findColumn(headers: string[], ...patterns: string[]): number {
-  const lower = headers.map(h => h.toLowerCase());
+  const lower = headers.map(h => h.toLowerCase().trim());
+  // Exact substring match
   for (const p of patterns) {
     const idx = lower.findIndex(h => h.includes(p));
     if (idx >= 0) return idx;
   }
+  // Fuzzy match fallback
+  for (let i = 0; i < lower.length; i++) {
+    if (fuzzyMatch(lower[i], patterns)) return i;
+  }
+  return -1;
+}
+
+function findTitleColumn(headers: string[]): number {
+  const idx = findColumn(headers, ...TITLE_COLUMN_ALIASES);
+  if (idx >= 0) return idx;
+  // Heuristic: column with most unique non-empty text values might be title
   return -1;
 }
 
@@ -109,9 +146,9 @@ export function parseXlsxContent(binaryString: string, fileName: string): {
   let setlistCounter = 1;
   for (const sheet of sheets.filter(s => s.type === 'setlist')) {
     const h = sheet.headers;
-    const iTitle = findColumn(h, 'song title', 'título', 'title', 'track', 'faixa', 'música');
-    const iComposer = findColumn(h, 'composer', 'compositor', 'artist', 'artista');
-    const iBmg = findColumn(h, 'bmg');
+    const iTitle = findTitleColumn(h);
+    const iComposer = findColumn(h, 'composer', 'compositor', 'komponist', 'artist', 'artista');
+    const iBmg = findColumn(h, 'bmg', 'verlag');
     const iMaestro = findColumn(h, 'maestro', 'code', 'código');
     const iPrs = findColumn(h, 'prs', 'tunecode');
     const iComments = findColumn(h, 'comment', 'observ', 'notas');
