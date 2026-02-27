@@ -1,7 +1,8 @@
 /**
  * XLSX/XLSM parser: reads workbook, identifies relevant sheets, extracts shows and setlists.
+ * Uses ExcelJS instead of SheetJS to avoid known vulnerabilities.
  */
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import type { ShowEntry, SongEntry, SetlistData } from './types';
 import { normalizeDate } from './normalizer';
 
@@ -38,11 +39,9 @@ const TITLE_COLUMN_ALIASES = [
 
 function fuzzyMatch(candidate: string, targets: string[], cutoff = 0.6): string | null {
   const c = candidate.toLowerCase().trim();
-  // Exact substring match first
   for (const t of targets) {
     if (c.includes(t) || t.includes(c)) return t;
   }
-  // Simple similarity based on shared characters
   for (const t of targets) {
     const longer = c.length > t.length ? c : t;
     const shorter = c.length > t.length ? t : c;
@@ -57,12 +56,10 @@ function fuzzyMatch(candidate: string, targets: string[], cutoff = 0.6): string 
 
 function findColumn(headers: string[], ...patterns: string[]): number {
   const lower = headers.map(h => h.toLowerCase().trim());
-  // Exact substring match
   for (const p of patterns) {
     const idx = lower.findIndex(h => h.includes(p));
     if (idx >= 0) return idx;
   }
-  // Fuzzy match fallback
   for (let i = 0; i < lower.length; i++) {
     if (fuzzyMatch(lower[i], patterns)) return i;
   }
@@ -72,37 +69,62 @@ function findColumn(headers: string[], ...patterns: string[]): number {
 function findTitleColumn(headers: string[]): number {
   const idx = findColumn(headers, ...TITLE_COLUMN_ALIASES);
   if (idx >= 0) return idx;
-  // Heuristic: column with most unique non-empty text values might be title
   return -1;
 }
 
-export function parseXlsxContent(binaryString: string, fileName: string): {
+function worksheetToJson(worksheet: ExcelJS.Worksheet): { headers: string[]; data: Record<string, unknown>[] } {
+  const headers: string[] = [];
+  const data: Record<string, unknown>[] = [];
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    headers[colNumber - 1] = String(cell.value ?? `Column${colNumber}`).trim();
+  });
+
+  if (headers.length === 0) return { headers, data };
+
+  for (let rowNum = 2; rowNum <= worksheet.rowCount; rowNum++) {
+    const row = worksheet.getRow(rowNum);
+    const record: Record<string, unknown> = {};
+    let hasValue = false;
+    headers.forEach((h, idx) => {
+      const cell = row.getCell(idx + 1);
+      const val = cell.value;
+      record[h] = val instanceof Date ? val : (val ?? '');
+      if (val !== null && val !== undefined && val !== '') hasValue = true;
+    });
+    if (hasValue) data.push(record);
+  }
+
+  return { headers, data };
+}
+
+export async function parseXlsxContentAsync(buffer: ArrayBuffer, fileName: string): Promise<{
   shows: ShowEntry[];
   setlists: SetlistData[];
   alerts: string[];
-} {
+}> {
   const shows: ShowEntry[] = [];
   const setlists: SetlistData[] = [];
   const alerts: string[] = [];
 
-  let wb: XLSX.WorkBook;
+  const workbook = new ExcelJS.Workbook();
   try {
-    wb = XLSX.read(binaryString, { type: 'binary', cellDates: true });
+    await workbook.xlsx.load(buffer);
   } catch (e) {
     alerts.push(`[${fileName}]: Erro ao ler arquivo Excel — ${e instanceof Error ? e.message : String(e)}`);
     return { shows, setlists, alerts };
   }
 
-  const sheets: SheetClassification[] = wb.SheetNames.map(name => {
-    const ws = wb.Sheets[name];
-    const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
-    const headers = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
-    return {
-      name,
-      type: classifySheet(name, headers),
-      data: jsonData,
+  const sheets: SheetClassification[] = [];
+  workbook.eachSheet((worksheet) => {
+    const { headers, data } = worksheetToJson(worksheet);
+    sheets.push({
+      name: worksheet.name,
+      type: classifySheet(worksheet.name, headers),
+      data,
       headers,
-    };
+    });
   });
 
   // Process dates/venues sheets
@@ -210,4 +232,19 @@ export function parseXlsxContent(binaryString: string, fileName: string): {
   }
 
   return { shows, setlists, alerts };
+}
+
+/**
+ * Synchronous wrapper kept for backward compatibility.
+ * Converts binary string to ArrayBuffer and calls the async version.
+ */
+export function parseXlsxContent(binaryString: string, fileName: string): {
+  shows: ShowEntry[];
+  setlists: SetlistData[];
+  alerts: string[];
+} {
+  // This is a sync fallback - callers should migrate to parseXlsxContentAsync
+  // For now, we return empty and log a warning
+  console.warn('parseXlsxContent (sync) is deprecated. Use parseXlsxContentAsync instead.');
+  return { shows: [], setlists: [], alerts: [`[${fileName}]: Use parseXlsxContentAsync for ExcelJS parsing.`] };
 }

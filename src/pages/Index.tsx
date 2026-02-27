@@ -12,8 +12,8 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState<'import' | 'search'>('import');
   const { t } = useI18n();
 
-  const handleFilesLoaded = (files: UploadedFile[]) => {
-    const result = processFiles(files);
+  const handleFilesLoaded = async (files: UploadedFile[]) => {
+    const result = await processFiles(files);
     setData(result);
   };
 
