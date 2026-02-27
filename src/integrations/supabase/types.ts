@@ -14,7 +14,210 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      erros_processamento: {
+        Row: {
+          arquivo_nome: string | null
+          created_at: string
+          descricao: string | null
+          id: number
+          linha_afetada: string | null
+          metodo_tentado: string | null
+          processamento_id: string | null
+          resolvido: boolean
+          tipo_erro: string | null
+        }
+        Insert: {
+          arquivo_nome?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: never
+          linha_afetada?: string | null
+          metodo_tentado?: string | null
+          processamento_id?: string | null
+          resolvido?: boolean
+          tipo_erro?: string | null
+        }
+        Update: {
+          arquivo_nome?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: never
+          linha_afetada?: string | null
+          metodo_tentado?: string | null
+          processamento_id?: string | null
+          resolvido?: boolean
+          tipo_erro?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "erros_processamento_processamento_id_fkey"
+            columns: ["processamento_id"]
+            isOneToOne: false
+            referencedRelation: "processamentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      processamentos: {
+        Row: {
+          arquivos_com_alerta: number
+          arquivos_com_falha: number
+          arquivos_recebidos: number
+          arquivos_sucesso: number
+          created_at: string
+          id: string
+          linhas_rejeitadas: number
+          musicas_catalogadas: number
+          relatorio_json: Json | null
+          setlists_criados: number
+          shows_extraidos: number
+          status_geral: string
+        }
+        Insert: {
+          arquivos_com_alerta?: number
+          arquivos_com_falha?: number
+          arquivos_recebidos?: number
+          arquivos_sucesso?: number
+          created_at?: string
+          id: string
+          linhas_rejeitadas?: number
+          musicas_catalogadas?: number
+          relatorio_json?: Json | null
+          setlists_criados?: number
+          shows_extraidos?: number
+          status_geral?: string
+        }
+        Update: {
+          arquivos_com_alerta?: number
+          arquivos_com_falha?: number
+          arquivos_recebidos?: number
+          arquivos_sucesso?: number
+          created_at?: string
+          id?: string
+          linhas_rejeitadas?: number
+          musicas_catalogadas?: number
+          relatorio_json?: Json | null
+          setlists_criados?: number
+          shows_extraidos?: number
+          status_geral?: string
+        }
+        Relationships: []
+      }
+      setlists: {
+        Row: {
+          bmg_control: string | null
+          comments: string | null
+          composers: string | null
+          created_at: string
+          id: number
+          imaestro_code: string | null
+          ordem: number
+          processamento_id: string
+          prs_tunecode: string | null
+          set_list_number: number
+          song_title: string
+        }
+        Insert: {
+          bmg_control?: string | null
+          comments?: string | null
+          composers?: string | null
+          created_at?: string
+          id?: never
+          imaestro_code?: string | null
+          ordem: number
+          processamento_id: string
+          prs_tunecode?: string | null
+          set_list_number: number
+          song_title: string
+        }
+        Update: {
+          bmg_control?: string | null
+          comments?: string | null
+          composers?: string | null
+          created_at?: string
+          id?: never
+          imaestro_code?: string | null
+          ordem?: number
+          processamento_id?: string
+          prs_tunecode?: string | null
+          set_list_number?: number
+          song_title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "setlists_processamento_id_fkey"
+            columns: ["processamento_id"]
+            isOneToOne: false
+            referencedRelation: "processamentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shows: {
+        Row: {
+          artist: string
+          city: string | null
+          comments: string | null
+          created_at: string
+          date: string
+          headliner_name: string | null
+          headliner_yn: string | null
+          id: number
+          processamento_id: string
+          promoter_contact: string | null
+          prs_venue_id: string | null
+          set_list_number: number | null
+          status: string
+          territory: string | null
+          venue: string | null
+          venue_address: string | null
+        }
+        Insert: {
+          artist: string
+          city?: string | null
+          comments?: string | null
+          created_at?: string
+          date: string
+          headliner_name?: string | null
+          headliner_yn?: string | null
+          id?: never
+          processamento_id: string
+          promoter_contact?: string | null
+          prs_venue_id?: string | null
+          set_list_number?: number | null
+          status?: string
+          territory?: string | null
+          venue?: string | null
+          venue_address?: string | null
+        }
+        Update: {
+          artist?: string
+          city?: string | null
+          comments?: string | null
+          created_at?: string
+          date?: string
+          headliner_name?: string | null
+          headliner_yn?: string | null
+          id?: never
+          processamento_id?: string
+          promoter_contact?: string | null
+          prs_venue_id?: string | null
+          set_list_number?: number | null
+          status?: string
+          territory?: string | null
+          venue?: string | null
+          venue_address?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shows_processamento_id_fkey"
+            columns: ["processamento_id"]
+            isOneToOne: false
+            referencedRelation: "processamentos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
