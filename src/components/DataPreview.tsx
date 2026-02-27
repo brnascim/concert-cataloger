@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Calendar, Music, AlertTriangle } from 'lucide-react';
+import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban } from 'lucide-react';
 import type { ProcessedData } from '@/lib/types';
 import { exportToExcel } from '@/lib/exporter';
 
@@ -28,10 +28,16 @@ export function DataPreview({ data }: DataPreviewProps) {
           📊 Relatório de Processamento
         </h3>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Stat label="Arquivos processados" value={data.filesProcessed} />
+          <Stat label="Arquivos recebidos" value={data.filesProcessed} />
+          <StatWithIcon label="Processados com sucesso" value={data.filesSuccess} icon={<CheckCircle className="h-3.5 w-3.5 text-green-500" />} />
+          <StatWithIcon label="Com alertas" value={data.filesWithAlerts} icon={<AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />} />
+          <StatWithIcon label="Falha total" value={data.filesWithFailures} icon={<XCircle className="h-3.5 w-3.5 text-destructive" />} />
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3 pt-3 border-t border-border">
           <Stat label="Shows extraídos" value={data.shows.length} />
           <Stat label="Setlists criados" value={data.setlists.length} />
           <Stat label="Total de músicas" value={totalSongs} />
+          <StatWithIcon label="Linhas rejeitadas" value={data.rejectedLines} icon={<Ban className="h-3.5 w-3.5 text-muted-foreground" />} />
         </div>
 
         {data.alerts.length > 0 && (
@@ -90,6 +96,15 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div>
       <p className="text-2xl font-bold text-foreground">{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function StatWithIcon({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-2xl font-bold text-foreground flex items-center gap-1.5">{icon} {value}</p>
       <p className="text-xs text-muted-foreground">{label}</p>
     </div>
   );
