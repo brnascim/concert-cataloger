@@ -1,0 +1,91 @@
+import { Music, Globe } from 'lucide-react';
+import { useTheme, type Theme } from '@/lib/theme';
+import { useI18n, LOCALE_LABELS, type Locale } from '@/lib/i18n';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+interface AppHeaderProps {
+  activeTab: 'import' | 'search';
+  onTabChange: (tab: 'import' | 'search') => void;
+}
+
+export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
+  const { theme, setTheme } = useTheme();
+  const { t, locale, setLocale } = useI18n();
+
+  const themes: { id: Theme; label: string }[] = [
+    { id: 'light', label: t('themeLight') },
+    { id: 'dark', label: t('themeDark') },
+    { id: 'bmg', label: t('themeBmg') },
+  ];
+
+  return (
+    <header className="border-b border-border">
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+        {/* Logo + Tabs */}
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-primary">
+              <Music className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-foreground tracking-tight">{t('appName')}</h1>
+              <p className="text-xs text-muted-foreground hidden sm:block">{t('appSubtitle')}</p>
+            </div>
+          </div>
+
+          <nav className="flex gap-1 rounded-lg bg-secondary p-1">
+            <button
+              onClick={() => onTabChange('import')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                activeTab === 'import' ? 'bg-card text-primary glow-amber-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              📥 {t('navImport')}
+            </button>
+            <button
+              onClick={() => onTabChange('search')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                activeTab === 'search' ? 'bg-card text-primary glow-amber-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              🔍 {t('navSearch')}
+            </button>
+          </nav>
+        </div>
+
+        {/* Theme + Language */}
+        <div className="flex items-center gap-2">
+          {/* Theme Switcher */}
+          <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5">
+            {themes.map(th => (
+              <button
+                key={th.id}
+                onClick={() => setTheme(th.id)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                  theme === th.id
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {th.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Language */}
+          <Select value={locale} onValueChange={v => setLocale(v as Locale)}>
+            <SelectTrigger className="w-[130px] h-8 text-xs">
+              <Globe className="h-3.5 w-3.5 mr-1" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.entries(LOCALE_LABELS) as [Locale, string][]).map(([code, label]) => (
+                <SelectItem key={code} value={code}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </header>
+  );
+}

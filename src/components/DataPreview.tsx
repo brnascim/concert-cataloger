@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban } from 'lucide-react';
 import type { ProcessedData } from '@/lib/types';
 import { exportToExcel } from '@/lib/exporter';
+import { exportToCsv } from '@/lib/csvExporter';
+import { useI18n } from '@/lib/i18n';
 
 interface DataPreviewProps {
   data: ProcessedData;
@@ -9,6 +11,7 @@ interface DataPreviewProps {
 
 export function DataPreview({ data }: DataPreviewProps) {
   const [activeTab, setActiveTab] = useState<string>('venues');
+  const { t } = useI18n();
   const totalSongs = data.setlists.reduce((sum, sl) => sum + sl.songs.length, 0);
 
   const tabs = [
@@ -25,25 +28,25 @@ export function DataPreview({ data }: DataPreviewProps) {
       {/* Report Summary */}
       <div className="rounded-lg bg-card border border-border p-5">
         <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">
-          📊 Relatório de Processamento
+          {t('reportTitle')}
         </h3>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Stat label="Arquivos recebidos" value={data.filesProcessed} />
-          <StatWithIcon label="Processados com sucesso" value={data.filesSuccess} icon={<CheckCircle className="h-3.5 w-3.5 text-green-500" />} />
-          <StatWithIcon label="Com alertas" value={data.filesWithAlerts} icon={<AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />} />
-          <StatWithIcon label="Falha total" value={data.filesWithFailures} icon={<XCircle className="h-3.5 w-3.5 text-destructive" />} />
+          <Stat label={t('filesReceived')} value={data.filesProcessed} />
+          <StatWithIcon label={t('processedSuccess')} value={data.filesSuccess} icon={<CheckCircle className="h-3.5 w-3.5 text-success" />} />
+          <StatWithIcon label={t('withAlerts')} value={data.filesWithAlerts} icon={<AlertTriangle className="h-3.5 w-3.5 text-warning" />} />
+          <StatWithIcon label={t('totalFailure')} value={data.filesWithFailures} icon={<XCircle className="h-3.5 w-3.5 text-destructive" />} />
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3 pt-3 border-t border-border">
-          <Stat label="Shows extraídos" value={data.shows.length} />
-          <Stat label="Setlists criados" value={data.setlists.length} />
-          <Stat label="Total de músicas" value={totalSongs} />
-          <StatWithIcon label="Linhas rejeitadas" value={data.rejectedLines} icon={<Ban className="h-3.5 w-3.5 text-muted-foreground" />} />
+          <Stat label={t('showsExtracted')} value={data.shows.length} />
+          <Stat label={t('setlistsCreated')} value={data.setlists.length} />
+          <Stat label={t('totalSongs')} value={totalSongs} />
+          <StatWithIcon label={t('rejectedLines')} value={data.rejectedLines} icon={<Ban className="h-3.5 w-3.5 text-muted-foreground" />} />
         </div>
 
         {data.alerts.length > 0 && (
           <div className="mt-4 space-y-1">
             <p className="text-xs font-semibold text-warning flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" /> ALERTAS / AMBIGUIDADES
+              <AlertTriangle className="h-3 w-3" /> {t('alertsTitle')}
             </p>
             {data.alerts.map((alert, i) => (
               <p key={i} className="text-xs text-muted-foreground ml-4">• {alert}</p>
@@ -80,14 +83,23 @@ export function DataPreview({ data }: DataPreviewProps) {
         )}
       </div>
 
-      {/* Export */}
-      <button
-        onClick={() => exportToExcel(data)}
-        className="flex items-center gap-2 rounded-md gradient-primary px-5 py-3 font-semibold text-primary-foreground transition-all hover:opacity-90 glow-amber"
-      >
-        <Download className="h-4 w-4" />
-        Exportar Excel (.xlsx)
-      </button>
+      {/* Export Buttons */}
+      <div className="flex gap-3 flex-wrap">
+        <button
+          onClick={() => exportToExcel(data)}
+          className="flex items-center gap-2 rounded-md gradient-primary px-5 py-3 font-semibold text-primary-foreground transition-all hover:opacity-90 glow-amber"
+        >
+          <Download className="h-4 w-4" />
+          {t('exportExcel')}
+        </button>
+        <button
+          onClick={() => exportToCsv(data)}
+          className="flex items-center gap-2 rounded-md bg-secondary px-5 py-3 font-semibold text-secondary-foreground transition-all hover:opacity-90 border border-border"
+        >
+          <Download className="h-4 w-4" />
+          {t('exportCsv')}
+        </button>
+      </div>
     </div>
   );
 }
@@ -118,9 +130,7 @@ function VenuesTable({ shows }: { shows: ProcessedData['shows'] }) {
         <thead>
           <tr className="bg-table-header">
             {cols.map(c => (
-              <th key={c} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                {c}
-              </th>
+              <th key={c} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{c}</th>
             ))}
           </tr>
         </thead>
@@ -131,9 +141,7 @@ function VenuesTable({ shows }: { shows: ProcessedData['shows'] }) {
               <td className="px-4 py-2.5 font-mono text-sm text-muted-foreground">{show.date}</td>
               <td className="px-4 py-2.5">
                 {show.territory && (
-                  <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                    {show.territory}
-                  </span>
+                  <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{show.territory}</span>
                 )}
               </td>
               <td className="px-4 py-2.5 text-secondary-foreground">{show.city}</td>
@@ -156,9 +164,7 @@ function SetlistTable({ songs }: { songs: ProcessedData['setlists'][0]['songs'] 
         <thead>
           <tr className="bg-table-header">
             {cols.map(c => (
-              <th key={c} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                {c}
-              </th>
+              <th key={c} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">{c}</th>
             ))}
           </tr>
         </thead>
@@ -173,9 +179,7 @@ function SetlistTable({ songs }: { songs: ProcessedData['setlists'][0]['songs'] 
               <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{song.prsTunecode}</td>
               <td className="px-4 py-2.5">
                 {song.comments && (
-                  <span className="rounded bg-accent/20 px-2 py-0.5 text-xs text-accent">
-                    {song.comments}
-                  </span>
+                  <span className="rounded bg-accent/20 px-2 py-0.5 text-xs text-accent">{song.comments}</span>
                 )}
               </td>
             </tr>
