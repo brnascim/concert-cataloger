@@ -11,14 +11,14 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const AppContent = () => {
-  const { session, loading } = useAuth();
+  const { session, loading, setLoggedIn } = useAuth();
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">Loading...</div>;
   }
 
   if (!session) {
-    return <AuthPage />;
+    return <AuthPage onLogin={setLoggedIn} />;
   }
 
   return (

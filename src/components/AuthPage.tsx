@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable/index';
+import { loginComEmail, loginComGoogle, type LocalSession } from '@/lib/localAuth';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useTheme, type Theme } from '@/lib/theme';
 import { Eye, EyeOff } from 'lucide-react';
 
-export function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true);
+interface AuthPageProps {
+  onLogin: (session: LocalSession) => void;
+}
+
+export function AuthPage({ onLogin }: AuthPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -25,25 +27,22 @@ export function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
-    if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        toast({ title: 'Login failed', description: error.message, variant: 'destructive' });
-      }
-    } else {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: window.location.origin },
-      });
-      if (error) {
-        toast({ title: 'Signup failed', description: error.message, variant: 'destructive' });
-      } else {
-        toast({ title: 'Check your email', description: 'A confirmation link has been sent.' });
-      }
+    try {
+      const sessao = loginComEmail(email, password);
+      onLogin(sessao);
+    } catch (err: any) {
+      toast({ title: 'Login failed', description: err.message, variant: 'destructive' });
     }
     setLoading(false);
+  };
+
+  const handleGoogleLogin = () => {
+    try {
+      const sessao = loginComGoogle();
+      onLogin(sessao);
+    } catch {
+      toast({ title: 'Google login failed', description: 'Não foi possível entrar com Google.', variant: 'destructive' });
+    }
   };
 
   return (
@@ -60,19 +59,12 @@ export function AuthPage() {
 
         {/* Form Card */}
         <div className="rounded-2xl border border-border bg-card p-8 space-y-5 shadow-lg">
-          {/* Google OAuth */}
+          {/* Google OAuth (simulado) */}
           <Button
             type="button"
             variant="outline"
             className="w-full font-medium gap-2"
-            onClick={async () => {
-              const { error } = await lovable.auth.signInWithOAuth('google', {
-                redirect_uri: window.location.origin,
-              });
-              if (error) {
-                toast({ title: 'Google login failed', description: String(error), variant: 'destructive' });
-              }
-            }}
+            onClick={handleGoogleLogin}
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" fill="#4285F4"/>
@@ -80,13 +72,13 @@ export function AuthPage() {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
-            {isLogin ? 'Entrar com Google' : 'Cadastrar com Google'}
+            Entrar com Google
           </Button>
 
           {/* Divider */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <div className="flex-1 h-px bg-border" />
-            <span>{isLogin ? 'ou entre com email' : 'ou crie sua conta'}</span>
+            <span>ou entre com email</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
@@ -114,7 +106,7 @@ export function AuthPage() {
                   required
                   minLength={6}
                   placeholder="••••••••"
-                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                  autoComplete="current-password"
                   className="pr-10"
                 />
                 <button
@@ -129,21 +121,14 @@ export function AuthPage() {
             </div>
 
             <Button type="submit" className="w-full font-semibold" disabled={loading}>
-              {loading ? '⏳ ...' : isLogin ? 'Sign In' : 'Sign Up'}
+              {loading ? '⏳ ...' : 'Sign In'}
             </Button>
           </form>
         </div>
 
-        {/* Toggle auth mode */}
+        {/* Restricted access notice */}
         <p className="text-center text-sm text-muted-foreground">
-          {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
-          <button
-            type="button"
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-primary hover:underline font-medium"
-          >
-            {isLogin ? 'Sign Up' : 'Sign In'}
-          </button>
+          Acesso restrito a usuários autorizados. Contate seu administrador.
         </p>
 
         {/* Theme Switcher */}

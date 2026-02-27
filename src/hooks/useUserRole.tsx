@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
 export type AppRole = 'admin' | 'revenue_assurance' | 'viewer';
@@ -36,40 +34,10 @@ const ROLE_PERMISSIONS: Record<AppRole, Permissions> = {
 
 export function useUserRole() {
   const { session } = useAuth();
-  const [role, setRole] = useState<AppRole>('viewer');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setRole('viewer');
-      setLoading(false);
-      return;
-    }
-
-    const fetchRole = async () => {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', session.user.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (data?.role) {
-        setRole(data.role as AppRole);
-      } else {
-        setRole('viewer');
-      }
-      setLoading(false);
-    };
-
-    fetchRole();
-  }, [session?.user?.id]);
-
+  const role: AppRole = session?.role ?? 'viewer';
   const permissions = ROLE_PERMISSIONS[role];
-
-  const hasPermission = (action: keyof Permissions): boolean => {
-    return permissions[action] === true;
-  };
+  const hasPermission = (action: keyof Permissions): boolean => permissions[action] === true;
+  const loading = false;
 
   return { role, permissions, hasPermission, loading };
 }
