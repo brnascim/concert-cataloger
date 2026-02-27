@@ -13,7 +13,7 @@ interface AppHeaderProps {
 export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
   const { theme, setTheme } = useTheme();
   const { t, locale, setLocale } = useI18n();
-  const { signOut } = useAuth();
+  const { session, signOut } = useAuth();
 
   const themes: { id: Theme; label: string }[] = [
     { id: 'light', label: t('themeLight') },
@@ -56,9 +56,8 @@ export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
           </nav>
         </div>
 
-        {/* Theme + Language */}
+        {/* Theme + Language + User */}
         <div className="flex items-center gap-2">
-          {/* Theme Switcher */}
           <div className="flex gap-0.5 rounded-lg bg-secondary p-0.5">
             {themes.map(th => (
               <button
@@ -75,7 +74,6 @@ export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
             ))}
           </div>
 
-          {/* Language */}
           <Select value={locale} onValueChange={v => setLocale(v as Locale)}>
             <SelectTrigger className="w-[130px] h-8 text-xs">
               <Globe className="h-3.5 w-3.5 mr-1" />
@@ -87,6 +85,12 @@ export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
               ))}
             </SelectContent>
           </Select>
+
+          {session && (
+            <span className="text-xs text-muted-foreground hidden md:inline">
+              {session.avatar} {session.nome}
+            </span>
+          )}
 
           <Button variant="ghost" size="sm" onClick={signOut} className="gap-1.5 text-xs">
             <LogOut className="h-3.5 w-3.5" /> Sign Out

@@ -1,28 +1,31 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import type { Session } from '@supabase/supabase-js';
+import { useState, useEffect, useCallback } from 'react';
+import { getSessao, logout as localLogout, type LocalSession } from '@/lib/localAuth';
 
 export function useAuth() {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<LocalSession | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setLoading(false);
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+  const refresh = useCallback(() => {
+    setSession(getSessao());
+    setLoading(false);
   }, []);
 
-  const signOut = () => supabase.auth.signOut();
+  useEffect(() => {
+    refresh();
+    // Listen for storage changes (e.g. login/logout in same tab)
+    const handler = () => refresh();
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, [refresh]);
 
-  return { session, loading, signOut };
+  const signOut = useCallback(() => {
+    localLogout();
+    setSession(null);
+  }, []);
+
+  const setLoggedIn = useCallback((s: LocalSession) => {
+    setSession(s);
+  }, []);
+
+  return { session, loading, signOut, setLoggedIn };
 }
