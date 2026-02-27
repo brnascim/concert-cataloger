@@ -25,6 +25,7 @@ export type Database = {
           processamento_id: string | null
           resolvido: boolean
           tipo_erro: string | null
+          user_id: string | null
         }
         Insert: {
           arquivo_nome?: string | null
@@ -36,6 +37,7 @@ export type Database = {
           processamento_id?: string | null
           resolvido?: boolean
           tipo_erro?: string | null
+          user_id?: string | null
         }
         Update: {
           arquivo_nome?: string | null
@@ -47,6 +49,7 @@ export type Database = {
           processamento_id?: string | null
           resolvido?: boolean
           tipo_erro?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -72,6 +75,7 @@ export type Database = {
           setlists_criados: number
           shows_extraidos: number
           status_geral: string
+          user_id: string | null
         }
         Insert: {
           arquivos_com_alerta?: number
@@ -86,6 +90,7 @@ export type Database = {
           setlists_criados?: number
           shows_extraidos?: number
           status_geral?: string
+          user_id?: string | null
         }
         Update: {
           arquivos_com_alerta?: number
@@ -100,6 +105,7 @@ export type Database = {
           setlists_criados?: number
           shows_extraidos?: number
           status_geral?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -116,6 +122,7 @@ export type Database = {
           prs_tunecode: string | null
           set_list_number: number
           song_title: string
+          user_id: string | null
         }
         Insert: {
           bmg_control?: string | null
@@ -129,6 +136,7 @@ export type Database = {
           prs_tunecode?: string | null
           set_list_number: number
           song_title: string
+          user_id?: string | null
         }
         Update: {
           bmg_control?: string | null
@@ -142,6 +150,7 @@ export type Database = {
           prs_tunecode?: string | null
           set_list_number?: number
           song_title?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -169,6 +178,7 @@ export type Database = {
           set_list_number: number | null
           status: string
           territory: string | null
+          user_id: string | null
           venue: string | null
           venue_address: string | null
         }
@@ -187,6 +197,7 @@ export type Database = {
           set_list_number?: number | null
           status?: string
           territory?: string | null
+          user_id?: string | null
           venue?: string | null
           venue_address?: string | null
         }
@@ -205,6 +216,7 @@ export type Database = {
           set_list_number?: number | null
           status?: string
           territory?: string | null
+          user_id?: string | null
           venue?: string | null
           venue_address?: string | null
         }

@@ -1,7 +1,9 @@
-import { Music, Globe } from 'lucide-react';
+import { Music, Globe, LogOut } from 'lucide-react';
 import { useTheme, type Theme } from '@/lib/theme';
 import { useI18n, LOCALE_LABELS, type Locale } from '@/lib/i18n';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 
 interface AppHeaderProps {
   activeTab: 'import' | 'search';
@@ -11,6 +13,7 @@ interface AppHeaderProps {
 export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
   const { theme, setTheme } = useTheme();
   const { t, locale, setLocale } = useI18n();
+  const { signOut } = useAuth();
 
   const themes: { id: Theme; label: string }[] = [
     { id: 'light', label: t('themeLight') },
@@ -84,6 +87,10 @@ export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
               ))}
             </SelectContent>
           </Select>
+
+          <Button variant="ghost" size="sm" onClick={signOut} className="gap-1.5 text-xs">
+            <LogOut className="h-3.5 w-3.5" /> Sign Out
+          </Button>
         </div>
       </div>
     </header>
