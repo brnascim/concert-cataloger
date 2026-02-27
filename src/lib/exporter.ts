@@ -1,26 +1,30 @@
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import type { ProcessedData } from './types';
 
-export function exportToExcel(data: ProcessedData): void {
-  const wb = XLSX.utils.book_new();
+export async function exportToExcel(data: ProcessedData): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
 
   // Dates & Venues sheet
+  const dvSheet = workbook.addWorksheet('Dates & Venues');
   const dvHeaders = [
     'Artist', 'Date', 'Territory', 'City', 'Venue', 'Venue Address',
     'PRS Venue ID', 'Local Promoter Contact Info', 'Comments',
     'Set List Number', 'Headliner Y/N', 'Headliner if N'
   ];
-  const dvData = data.shows.map(s => [
-    s.artist, s.date, s.territory, s.city, s.venue, s.venueAddress,
-    s.prsVenueId, s.localPromoterContactInfo, s.comments,
-    s.setListNumber, s.headlinerYN, s.headlinerIfN,
-  ]);
-  const dvSheet = XLSX.utils.aoa_to_sheet([dvHeaders, ...dvData]);
-  
-  // Column widths
-  dvSheet['!cols'] = dvHeaders.map(h => ({ wch: Math.max(h.length + 4, 14) }));
-  
-  XLSX.utils.book_append_sheet(wb, dvSheet, 'Dates & Venues');
+  dvSheet.addRow(dvHeaders);
+  dvSheet.getRow(1).font = { bold: true };
+
+  for (const s of data.shows) {
+    dvSheet.addRow([
+      s.artist, s.date, s.territory, s.city, s.venue, s.venueAddress,
+      s.prsVenueId, s.localPromoterContactInfo, s.comments,
+      s.setListNumber, s.headlinerYN, s.headlinerIfN,
+    ]);
+  }
+
+  dvHeaders.forEach((_, i) => {
+    dvSheet.getColumn(i + 1).width = 18;
+  });
 
   // Setlist sheets
   const slHeaders = [
@@ -29,15 +33,29 @@ export function exportToExcel(data: ProcessedData): void {
   ];
 
   for (const sl of data.setlists) {
-    const slData = sl.songs.map(s => [
-      s.songTitle, s.composers, s.bmgControl,
-      s.iMaestroSongCode, s.prsTunecode, s.comments,
-    ]);
-    const slSheet = XLSX.utils.aoa_to_sheet([slHeaders, ...slData]);
-    slSheet['!cols'] = slHeaders.map(h => ({ wch: Math.max(h.length + 4, 14) }));
-    XLSX.utils.book_append_sheet(wb, slSheet, `Set List ${sl.number}`);
+    const slSheet = workbook.addWorksheet(`Set List ${sl.number}`);
+    slSheet.addRow(slHeaders);
+    slSheet.getRow(1).font = { bold: true };
+
+    for (const s of sl.songs) {
+      slSheet.addRow([
+        s.songTitle, s.composers, s.bmgControl,
+        s.iMaestroSongCode, s.prsTunecode, s.comments,
+      ]);
+    }
+
+    slHeaders.forEach((_, i) => {
+      slSheet.getColumn(i + 1).width = 18;
+    });
   }
 
   // Download
-  XLSX.writeFile(wb, 'setlists_consolidated.xlsx');
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'setlists_consolidated.xlsx';
+  a.click();
+  URL.revokeObjectURL(url);
 }

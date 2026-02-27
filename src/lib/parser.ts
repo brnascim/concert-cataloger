@@ -1,7 +1,7 @@
 import type { ProcessedData, ShowEntry, SongEntry, SetlistData, UploadedFile, FileStatus } from './types';
 import { isValidShow, isValidSongTitle } from './validator';
 import { normalizeText, normalizeDate } from './normalizer';
-import { parseXlsxContent } from './xlsxParser';
+import { parseXlsxContentAsync } from './xlsxParser';
 
 const TERRITORY_MAP: Record<string, string> = {
   'uk': 'UK', 'united kingdom': 'UK', 'england': 'UK', 'scotland': 'UK', 'wales': 'UK',
@@ -178,7 +178,7 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
 
 // normalizeDate is now imported from ./normalizer
 
-export function processFiles(files: UploadedFile[]): ProcessedData {
+export async function processFiles(files: UploadedFile[]): Promise<ProcessedData> {
   const allShows: ShowEntry[] = [];
   const allSetlists: SetlistData[] = [];
   const allAlerts: string[] = [];
@@ -192,7 +192,13 @@ export function processFiles(files: UploadedFile[]): ProcessedData {
 
     try {
       if (isXlsx) {
-        result = parseXlsxContent(file.content, file.name);
+        // Convert binary string to ArrayBuffer for ExcelJS
+        const buf = new ArrayBuffer(file.content.length);
+        const view = new Uint8Array(buf);
+        for (let i = 0; i < file.content.length; i++) {
+          view[i] = file.content.charCodeAt(i) & 0xFF;
+        }
+        result = await parseXlsxContentAsync(buf, file.name);
       } else {
         result = parseTxtContent(file.content, file.name);
       }
