@@ -2,10 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap');
 
 @layer base {
-  :root {
+  /* ═══ DARK THEME (default) ═══ */
+  :root,
+  [data-theme="dark"] {
     --background: 220 20% 7%;
     --foreground: 40 20% 92%;
 
@@ -45,7 +47,6 @@
     --sidebar-border: 220 15% 18%;
     --sidebar-ring: 40 90% 55%;
 
-    /* Custom tokens */
     --surface-elevated: 220 18% 12%;
     --glow-primary: 40 90% 55%;
     --table-row-alt: 220 18% 9%;
@@ -53,11 +54,110 @@
     --success: 150 60% 45%;
     --warning: 35 90% 55%;
   }
+
+  /* ═══ LIGHT THEME ═══ */
+  [data-theme="light"] {
+    --background: 0 0% 100%;
+    --foreground: 240 15% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 15% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 15% 15%;
+
+    --primary: 240 15% 15%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 240 15% 15%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 8% 46%;
+
+    --accent: 37 90% 55%;
+    --accent-foreground: 240 15% 15%;
+
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 240 15% 15%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 14% 96%;
+    --sidebar-foreground: 240 15% 15%;
+    --sidebar-primary: 240 15% 15%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 92%;
+    --sidebar-accent-foreground: 240 15% 15%;
+    --sidebar-border: 220 13% 90%;
+    --sidebar-ring: 240 15% 15%;
+
+    --surface-elevated: 0 0% 100%;
+    --glow-primary: 240 15% 15%;
+    --table-row-alt: 220 14% 98%;
+    --table-header: 220 14% 96%;
+    --success: 150 60% 40%;
+    --warning: 35 90% 50%;
+  }
+
+  /* ═══ BMG THEME ═══ */
+  [data-theme="bmg"] {
+    --background: 200 57% 19%;
+    --foreground: 195 50% 96%;
+
+    --card: 198 50% 23%;
+    --card-foreground: 195 50% 96%;
+
+    --popover: 198 50% 23%;
+    --popover-foreground: 195 50% 96%;
+
+    --primary: 65 100% 43%;
+    --primary-foreground: 200 57% 19%;
+
+    --secondary: 199 35% 28%;
+    --secondary-foreground: 65 100% 43%;
+
+    --muted: 199 35% 25%;
+    --muted-foreground: 195 25% 55%;
+
+    --accent: 65 100% 43%;
+    --accent-foreground: 200 57% 19%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 198 40% 33%;
+    --input: 198 40% 33%;
+    --ring: 65 100% 43%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 200 60% 15%;
+    --sidebar-foreground: 195 50% 96%;
+    --sidebar-primary: 65 100% 43%;
+    --sidebar-primary-foreground: 200 57% 19%;
+    --sidebar-accent: 199 35% 25%;
+    --sidebar-accent-foreground: 65 100% 43%;
+    --sidebar-border: 198 40% 33%;
+    --sidebar-ring: 65 100% 43%;
+
+    --surface-elevated: 198 50% 26%;
+    --glow-primary: 65 100% 43%;
+    --table-row-alt: 200 55% 17%;
+    --table-header: 200 60% 15%;
+    --success: 65 100% 43%;
+    --warning: 37 90% 55%;
+  }
 }
 
 @layer base {
   * {
     @apply border-border;
+    transition: background-color 0.25s ease, color 0.15s ease, border-color 0.25s ease;
   }
 
   body {
@@ -65,9 +165,19 @@
     font-family: 'Space Grotesk', sans-serif;
   }
 
+  [data-theme="bmg"] body,
+  [data-theme="bmg"] {
+    font-family: 'DM Sans', 'Helvetica Neue', sans-serif;
+  }
+
   code, .font-mono {
     font-family: 'JetBrains Mono', monospace;
   }
+}
+
+/* BMG card accent border */
+[data-theme="bmg"] .bg-card {
+  border-left: 3px solid hsl(var(--primary));
 }
 
 @layer utilities {
