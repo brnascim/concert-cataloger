@@ -2,6 +2,7 @@ import type { ProcessedData, ShowEntry, SongEntry, SetlistData, UploadedFile, Fi
 import { isValidShow, isValidSongTitle } from './validator';
 import { normalizeText, normalizeDate } from './normalizer';
 import { parseXlsxContentAsync } from './xlsxParser';
+import { extractDocxText, extractRtfText } from './docxParser';
 import { inferTerritory, inferTerritoryFromComment } from './territory';
 
 function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[]; setlists: SetlistData[]; alerts: string[] } {
@@ -20,19 +21,16 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
 
   for (const line of lines) {
     // Detect artist line
-    const artistMatch = line.match(/^(?:artista|artist|banda|band)\s*:\s*(.+)/i);
+    const artistMatch = line.match(/^(?:artista|artist|banda|band|künstler|artiste)\s*:\s*(.+)/i);
     if (artistMatch) {
       currentArtist = artistMatch[1].trim();
       continue;
     }
 
     // Detect date/venue line: "Data: DD/MM/YYYY — Venue, City, Territory" or similar
-    const dateVenueMatch = line.match(/^(?:data|date)\s*:\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})\s*[—–\-]\s*(.+)/i);
+    const dateVenueMatch = line.match(/^(?:data|date|datum|fecha)\s*:\s*(.+?)\s*[—–\-]\s*(.+)/i);
     if (dateVenueMatch) {
-      // Save previous show if exists
-      if (currentSongs.length > 0) {
-        finishShow();
-      }
+      if (currentSongs.length > 0) finishShow();
       currentDate = normalizeDate(dateVenueMatch[1]);
       const rest = dateVenueMatch[2].split(',').map(s => s.trim());
       currentVenue = rest[0] || '';
@@ -45,7 +43,7 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
     }
 
     // Alternate: just a date line
-    const justDateMatch = line.match(/^(?:data|date)\s*:\s*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i);
+    const justDateMatch = line.match(/^(?:data|date|datum|fecha)\s*:\s*(.+)/i);
     if (justDateMatch && !dateVenueMatch) {
       if (currentSongs.length > 0) finishShow();
       currentDate = normalizeDate(justDateMatch[1]);
@@ -54,8 +52,8 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
       continue;
     }
 
-    // Detect venue line
-    const venueMatch = line.match(/^(?:venue|local|casa de show)\s*:\s*(.+)/i);
+    // Detect venue line (multi-language)
+    const venueMatch = line.match(/^(?:venue|local|casa de show|lieu|ort|lugar|sala)\s*:\s*(.+)/i);
     if (venueMatch) {
       const parts = venueMatch[1].split(',').map(s => s.trim());
       currentVenue = parts[0] || '';
@@ -65,14 +63,21 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
     }
 
     // Detect city line
-    const cityMatch = line.match(/^(?:city|cidade)\s*:\s*(.+)/i);
+    const cityMatch = line.match(/^(?:city|cidade|ciudad|ville|stadt)\s*:\s*(.+)/i);
     if (cityMatch) {
       currentCity = cityMatch[1].trim();
       continue;
     }
 
+    // Detect territory line
+    const territoryMatch = line.match(/^(?:territory|país|pais|country|region|região)\s*:\s*(.+)/i);
+    if (territoryMatch) {
+      currentTerritory = inferTerritory(territoryMatch[1].trim()) || territoryMatch[1].trim();
+      continue;
+    }
+
     // Detect BIS/Encore
-    if (/^(bis|encore)\s*:?\s*$/i.test(line)) {
+    if (/^(bis|encore|zugabe|rappel)\s*:?\s*$/i.test(line)) {
       inBis = true;
       continue;
     }
@@ -98,7 +103,7 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
       continue;
     }
 
-    // If we have a date set and the line looks like a song title (no special prefix)
+    // If we have a date set and the line looks like a song title
     if (currentDate && !line.includes(':') && line.length > 1 && line.length < 100) {
       currentSongs.push({
         songTitle: line,
@@ -111,7 +116,6 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
     }
   }
 
-  // Finish last show
   if (currentSongs.length > 0) finishShow();
 
   function finishShow() {
@@ -158,8 +162,6 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
   return { shows, setlists, alerts };
 }
 
-// normalizeDate is now imported from ./normalizer
-
 export async function processFiles(files: UploadedFile[]): Promise<ProcessedData> {
   const allShows: ShowEntry[] = [];
   const allSetlists: SetlistData[] = [];
@@ -169,18 +171,32 @@ export async function processFiles(files: UploadedFile[]): Promise<ProcessedData
   let totalRejectedLines = 0;
 
   for (const file of files) {
-    const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xlsm');
+    const ext = file.name.toLowerCase();
+    const isXlsx = ext.endsWith('.xlsx') || ext.endsWith('.xlsm');
+    const isDocx = ext.endsWith('.docx');
+    const isRtf = ext.endsWith('.rtf');
     let result: { shows: ShowEntry[]; setlists: SetlistData[]; alerts: string[] };
 
     try {
       if (isXlsx) {
-        // Convert binary string to ArrayBuffer for ExcelJS
         const buf = new ArrayBuffer(file.content.length);
         const view = new Uint8Array(buf);
         for (let i = 0; i < file.content.length; i++) {
           view[i] = file.content.charCodeAt(i) & 0xFF;
         }
         result = await parseXlsxContentAsync(buf, file.name);
+      } else if (isDocx) {
+        // Convert binary string to ArrayBuffer for mammoth
+        const buf = new ArrayBuffer(file.content.length);
+        const view = new Uint8Array(buf);
+        for (let i = 0; i < file.content.length; i++) {
+          view[i] = file.content.charCodeAt(i) & 0xFF;
+        }
+        const text = await extractDocxText(buf);
+        result = parseTxtContent(text, file.name);
+      } else if (isRtf) {
+        const text = extractRtfText(file.content);
+        result = parseTxtContent(text, file.name);
       } else {
         result = parseTxtContent(file.content, file.name);
       }
@@ -191,7 +207,7 @@ export async function processFiles(files: UploadedFile[]): Promise<ProcessedData
       continue;
     }
 
-    // Validate shows — reject empty lines
+    // Validate shows
     let rejectedShows = 0;
     const validShows: ShowEntry[] = [];
     for (const show of result.shows) {
@@ -203,7 +219,7 @@ export async function processFiles(files: UploadedFile[]): Promise<ProcessedData
       }
     }
 
-    // Validate setlist songs — reject invalid titles
+    // Validate setlist songs
     let rejectedSongs = 0;
     const validSetlists: SetlistData[] = [];
     for (const sl of result.setlists) {

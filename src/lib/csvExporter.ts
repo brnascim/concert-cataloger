@@ -1,4 +1,5 @@
 import type { ProcessedData } from './types';
+import { fillMissing, normalizeComposers } from './infoNaoLocalizada';
 
 export function exportToCsv(data: ProcessedData): void {
   const rows: string[][] = [];
@@ -15,12 +16,16 @@ export function exportToCsv(data: ProcessedData): void {
     if (setlist) {
       for (let i = 0; i < setlist.songs.length; i++) {
         const song = setlist.songs[i];
+        const title = song.songTitle?.trim()
+          ? song.songTitle
+          : `[título não localizado — faixa ${i + 1}]`;
         rows.push([
-          show.artist, show.date, show.territory, show.city, show.venue,
+          fillMissing(show.artist), fillMissing(show.date), fillMissing(show.territory),
+          fillMissing(show.city), fillMissing(show.venue),
           String(show.setListNumber), String(i + 1),
-          song.songTitle, song.composers, song.bmgControl,
-          song.iMaestroSongCode, song.prsTunecode,
-          show.comments, song.comments, show.sourceFile,
+          title, normalizeComposers(song.composers), fillMissing(song.bmgControl),
+          fillMissing(song.iMaestroSongCode), fillMissing(song.prsTunecode),
+          fillMissing(show.comments), fillMissing(song.comments), fillMissing(show.sourceFile),
         ]);
       }
     }

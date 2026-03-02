@@ -33,9 +33,10 @@ export function FileUploadZone({ onFilesLoaded }: FileUploadZoneProps) {
     const loaded: UploadedFile[] = [];
 
     for (const file of files) {
-      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xlsm');
-      if (isExcel) {
-        // Read as binary string for xlsx library
+      const ext = file.name.toLowerCase();
+      const isBinary = ext.endsWith('.xlsx') || ext.endsWith('.xlsm') || ext.endsWith('.docx');
+      if (isBinary) {
+        // Read as binary string for ExcelJS / mammoth
         const buffer = await file.arrayBuffer();
         const binary = Array.from(new Uint8Array(buffer))
           .map(b => String.fromCharCode(b))
