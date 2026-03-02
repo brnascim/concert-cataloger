@@ -11,6 +11,7 @@ export interface ShowEntry {
   setListNumber: number;
   headlinerYN: string;
   headlinerIfN: string;
+  sourceFile: string;
 }
 
 export interface SongEntry {

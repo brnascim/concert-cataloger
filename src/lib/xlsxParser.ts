@@ -160,6 +160,7 @@ export async function parseXlsxContentAsync(buffer: ArrayBuffer, fileName: strin
         setListNumber: parseInt(get(iSetNum)) || 1,
         headlinerYN: get(iHeadliner),
         headlinerIfN: get(iHeadlinerN),
+        sourceFile: fileName,
       });
     }
   }

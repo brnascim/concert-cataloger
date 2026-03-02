@@ -139,6 +139,7 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
       setListNumber: setlistNum,
       headlinerYN: '',
       headlinerIfN: '',
+      sourceFile: fileName,
     });
 
     if (currentArtist && currentSongs.some(s => s.composers === currentArtist)) {
