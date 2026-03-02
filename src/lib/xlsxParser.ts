@@ -6,8 +6,8 @@ import ExcelJS from 'exceljs';
 import type { ShowEntry, SongEntry, SetlistData } from './types';
 import { normalizeDate } from './normalizer';
 
-const SETLIST_KEYWORDS = ['set list', 'setlist', 'set_list', 'songs', 'músicas', 'tracklist', 'repertório', 'repertorio', 'playlist'];
-const DATES_KEYWORDS = ['dates', 'venues', 'datas', 'shows', 'schedule', 'agenda', 'tour', 'itinerary', 'gigs'];
+const SETLIST_KEYWORDS = ['set list', 'setlist', 'set_list', 'songs', 'músicas', 'tracklist', 'repertório', 'repertorio', 'playlist', 'canciones', 'lieder', 'chansons'];
+const DATES_KEYWORDS = ['dates', 'venues', 'datas', 'shows', 'schedule', 'agenda', 'tour', 'itinerary', 'gigs', 'konzerte', 'spectacles', 'conciertos'];
 
 interface SheetClassification {
   name: string;
@@ -21,10 +21,10 @@ function classifySheet(name: string, headers: string[]): 'setlist' | 'dates' | '
   const headersLower = headers.map(h => h.toLowerCase());
 
   const isSetlist = SETLIST_KEYWORDS.some(k => nameLower.includes(k)) ||
-    headersLower.some(h => h.includes('song') || h.includes('título') || h.includes('title') || h.includes('track'));
+    headersLower.some(h => h.includes('song') || h.includes('título') || h.includes('title') || h.includes('track') || h.includes('chanson') || h.includes('lied') || h.includes('canción'));
 
   const isDates = DATES_KEYWORDS.some(k => nameLower.includes(k)) ||
-    headersLower.some(h => h.includes('date') || h.includes('venue') || h.includes('city') || h.includes('data'));
+    headersLower.some(h => h.includes('date') || h.includes('venue') || h.includes('city') || h.includes('data') || h.includes('lieu') || h.includes('ort') || h.includes('lugar') || h.includes('datum'));
 
   if (isSetlist) return 'setlist';
   if (isDates) return 'dates';
@@ -35,6 +35,7 @@ function classifySheet(name: string, headers: string[]): 'setlist' | 'dates' | '
 const TITLE_COLUMN_ALIASES = [
   'song title', 'title', 'título', 'track', 'faixa', 'música',
   'name', 'song', 'track name', 'track title', 'canção', 'werkname',
+  'chanson', 'lied', 'canción', 'titre', 'titel', 'titulo',
 ];
 
 function fuzzyMatch(candidate: string, targets: string[], cutoff = 0.6): string | null {
@@ -130,15 +131,15 @@ export async function parseXlsxContentAsync(buffer: ArrayBuffer, fileName: strin
   // Process dates/venues sheets
   for (const sheet of sheets.filter(s => s.type === 'dates')) {
     const h = sheet.headers;
-    const iArtist = findColumn(h, 'artist', 'artista', 'banda', 'band');
-    const iDate = findColumn(h, 'date', 'data');
-    const iTerritory = findColumn(h, 'territory', 'país', 'region', 'região');
-    const iCity = findColumn(h, 'city', 'cidade');
-    const iVenue = findColumn(h, 'venue', 'local', 'casa de show');
-    const iVenueAddr = findColumn(h, 'venue address', 'endereço');
+    const iArtist = findColumn(h, 'artist', 'artista', 'banda', 'band', 'künstler', 'artiste');
+    const iDate = findColumn(h, 'date', 'data', 'datum', 'fecha');
+    const iTerritory = findColumn(h, 'territory', 'país', 'region', 'região', 'pays', 'land');
+    const iCity = findColumn(h, 'city', 'cidade', 'ville', 'stadt', 'ciudad');
+    const iVenue = findColumn(h, 'venue', 'local', 'casa de show', 'lieu', 'ort', 'lugar', 'sala');
+    const iVenueAddr = findColumn(h, 'venue address', 'endereço', 'adresse', 'dirección');
     const iPrsVenue = findColumn(h, 'prs venue');
-    const iPromoter = findColumn(h, 'promoter', 'promotor');
-    const iComments = findColumn(h, 'comment', 'observ', 'notas');
+    const iPromoter = findColumn(h, 'promoter', 'promotor', 'promoteur', 'veranstalter');
+    const iComments = findColumn(h, 'comment', 'observ', 'notas', 'remarques', 'anmerkungen');
     const iSetNum = findColumn(h, 'set list number', 'setlist', 'set list #');
     const iHeadliner = findColumn(h, 'headliner y/n', 'headliner');
     const iHeadlinerN = findColumn(h, 'headliner if');
@@ -170,11 +171,11 @@ export async function parseXlsxContentAsync(buffer: ArrayBuffer, fileName: strin
   for (const sheet of sheets.filter(s => s.type === 'setlist')) {
     const h = sheet.headers;
     const iTitle = findTitleColumn(h);
-    const iComposer = findColumn(h, 'composer', 'compositor', 'komponist', 'artist', 'artista');
-    const iBmg = findColumn(h, 'bmg', 'verlag');
+    const iComposer = findColumn(h, 'composer', 'compositor', 'komponist', 'artist', 'artista', 'compositeur', 'autor');
+    const iBmg = findColumn(h, 'bmg', 'verlag', 'control');
     const iMaestro = findColumn(h, 'maestro', 'code', 'código');
     const iPrs = findColumn(h, 'prs', 'tunecode');
-    const iComments = findColumn(h, 'comment', 'observ', 'notas');
+    const iComments = findColumn(h, 'comment', 'observ', 'notas', 'remarques', 'anmerkungen');
 
     if (iTitle < 0) {
       alerts.push(`[${fileName}/${sheet.name}]: Coluna de título não encontrada — aba ignorada.`);
