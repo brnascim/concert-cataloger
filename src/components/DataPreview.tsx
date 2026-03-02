@@ -1,21 +1,25 @@
 import { useState, useMemo } from 'react';
-import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Wrench, ShieldCheck } from 'lucide-react';
+import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Wrench, ShieldCheck, RotateCcw, Save, FileText, Filter, FilterX } from 'lucide-react';
 import type { ProcessedData } from '@/lib/types';
 import { exportToExcel } from '@/lib/exporter';
 import { exportToCsv } from '@/lib/csvExporter';
 import { sanitizeData, type SanitizationReport } from '@/lib/sanitizer';
 import { runQAAudit, type AuditReport } from '@/lib/qaAuditor';
 import { useI18n } from '@/lib/i18n';
+import { INFO_NAO_LOCALIZADA } from '@/lib/infoNaoLocalizada';
 
 interface DataPreviewProps {
   data: ProcessedData;
+  onReset?: () => void;
+  onSaveDraft?: (data: ProcessedData) => void;
 }
 
-export function DataPreview({ data }: DataPreviewProps) {
+export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
   const [activeTab, setActiveTab] = useState<string>('venues');
   const [showSanitization, setShowSanitization] = useState(false);
   const [showQuality, setShowQuality] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
+  const [filterErrors, setFilterErrors] = useState(false);
   const { t } = useI18n();
 
   // Run sanitization pipeline then QA audit (v1.2)
@@ -29,6 +33,15 @@ export function DataPreview({ data }: DataPreviewProps) {
     report.correction6_datesNormalized + report.correction7_cancelledShows +
     report.correction8_djBpmExtracted + report.correction9_territoryInferred;
 
+  // Filter shows that have "informação não localizada" or audit issues
+  const filteredShows = useMemo(() => {
+    if (!filterErrors) return sanitized.shows;
+    return sanitized.shows.filter(s => {
+      const values = [s.artist, s.date, s.territory, s.city, s.venue, s.venueAddress, s.comments];
+      return values.some(v => v === INFO_NAO_LOCALIZADA || !v || !v.trim());
+    });
+  }, [sanitized.shows, filterErrors]);
+
   const tabs = [
     { id: 'venues', label: 'Dates & Venues', icon: Calendar },
     ...sanitized.setlists.map(sl => ({
@@ -39,7 +52,60 @@ export function DataPreview({ data }: DataPreviewProps) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* ═══ Sticky Action Bar ═══ */}
+      <div className="sticky top-[73px] z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border -mx-6 px-6 py-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            {onReset && (
+              <button
+                onClick={onReset}
+                className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                ➕ {t('newProcessing')}
+              </button>
+            )}
+            {onSaveDraft && (
+              <button
+                onClick={() => onSaveDraft(sanitized)}
+                className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border"
+              >
+                <Save className="h-3.5 w-3.5" />
+                💾 Salvar Rascunho
+              </button>
+            )}
+            <button
+              onClick={() => exportToExcel(sanitized)}
+              className="flex items-center gap-1.5 rounded-md gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all glow-amber-sm"
+            >
+              <Download className="h-3.5 w-3.5" />
+              📊 {t('exportExcel')}
+            </button>
+            <button
+              onClick={() => exportToCsv(sanitized)}
+              className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t('exportCsv')}
+            </button>
+          </div>
+
+          {/* Quality Filter Toggle */}
+          <button
+            onClick={() => setFilterErrors(!filterErrors)}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all border ${
+              filterErrors
+                ? 'bg-warning/15 text-warning border-warning/30'
+                : 'bg-secondary text-secondary-foreground border-border hover:bg-secondary/80'
+            }`}
+          >
+            {filterErrors ? <FilterX className="h-3.5 w-3.5" /> : <Filter className="h-3.5 w-3.5" />}
+            {filterErrors ? 'Mostrar todos' : 'Apenas com erros'}
+          </button>
+        </div>
+      </div>
+
       {/* Report Summary */}
       <div className="rounded-lg bg-card border border-border p-5">
         <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">
@@ -83,9 +149,7 @@ export function DataPreview({ data }: DataPreviewProps) {
             </span>
             {showSanitization ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
-          {showSanitization && (
-            <SanitizationDetails report={report} />
-          )}
+          {showSanitization && <SanitizationDetails report={report} />}
         </div>
       )}
 
@@ -99,9 +163,7 @@ export function DataPreview({ data }: DataPreviewProps) {
             <span>{t('qualityTitle')}</span>
             {showQuality ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
-          {showQuality && (
-            <QualityTable artists={report.artistQuality} />
-          )}
+          {showQuality && <QualityTable artists={report.artistQuality} />}
         </div>
       )}
 
@@ -174,7 +236,7 @@ export function DataPreview({ data }: DataPreviewProps) {
 
       {/* Table Content */}
       <div className="rounded-lg border border-border overflow-hidden">
-        {activeTab === 'venues' && <VenuesTable shows={sanitized.shows} />}
+        {activeTab === 'venues' && <VenuesTable shows={filteredShows} />}
         {sanitized.setlists.map(sl =>
           activeTab === `setlist-${sl.number}` ? (
             <SetlistTable key={sl.number} songs={sl.songs} />
@@ -182,23 +244,9 @@ export function DataPreview({ data }: DataPreviewProps) {
         )}
       </div>
 
-      {/* Export Buttons */}
-      <div className="flex gap-3 flex-wrap">
-        <button
-          onClick={() => exportToExcel(sanitized)}
-          className="flex items-center gap-2 rounded-md gradient-primary px-5 py-3 font-semibold text-primary-foreground transition-all hover:opacity-90 glow-amber"
-        >
-          <Download className="h-4 w-4" />
-          {t('exportExcel')}
-        </button>
-        <button
-          onClick={() => exportToCsv(sanitized)}
-          className="flex items-center gap-2 rounded-md bg-secondary px-5 py-3 font-semibold text-secondary-foreground transition-all hover:opacity-90 border border-border"
-        >
-          <Download className="h-4 w-4" />
-          {t('exportCsv')}
-        </button>
-      </div>
+      {filterErrors && filteredShows.length === 0 && (
+        <p className="text-center text-sm text-success py-4">✅ Nenhuma linha com erros encontrada!</p>
+      )}
     </div>
   );
 }
@@ -305,7 +353,7 @@ function VenuesTable({ shows }: { shows: ProcessedData['shows'] }) {
               <td className="px-4 py-2.5 font-medium text-foreground">{show.artist}</td>
               <td className="px-4 py-2.5 font-mono text-sm text-muted-foreground">{show.date}</td>
               <td className="px-4 py-2.5">
-                {show.territory && (
+                {show.territory && show.territory !== INFO_NAO_LOCALIZADA && (
                   <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{show.territory}</span>
                 )}
               </td>

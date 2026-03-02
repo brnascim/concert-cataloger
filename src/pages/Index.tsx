@@ -19,6 +19,16 @@ const Index = () => {
 
   const handleReset = () => setData(null);
 
+  const handleSaveDraft = (sanitizedData: ProcessedData) => {
+    try {
+      localStorage.setItem('setlist_draft', JSON.stringify(sanitizedData));
+      // Simple feedback via alert — could be replaced with toast
+      alert('Rascunho salvo com sucesso!');
+    } catch {
+      alert('Erro ao salvar rascunho.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <AppHeader activeTab={activeTab} onTabChange={setActiveTab} />
@@ -34,18 +44,7 @@ const Index = () => {
               <FileUploadZone onFilesLoaded={handleFilesLoaded} />
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-foreground">{t('result')}</h2>
-                <button
-                  onClick={handleReset}
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {t('newProcessing')}
-                </button>
-              </div>
-              <DataPreview data={data} />
-            </div>
+            <DataPreview data={data} onReset={handleReset} onSaveDraft={handleSaveDraft} />
           )
         ) : (
           <SearchPage />
