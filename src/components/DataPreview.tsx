@@ -236,7 +236,7 @@ function StatWithIcon({ label, value, icon }: { label: string; value: number; ic
 }
 
 function VenuesTable({ shows }: { shows: ProcessedData['shows'] }) {
-  const cols = ['Artist', 'Date', 'Territory', 'City', 'Venue', 'Set List #', 'Comments'];
+  const cols = ['Artist', 'Date', 'Territory', 'City', 'Venue', 'Set List #', 'Comments', 'Source File'];
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -261,6 +261,7 @@ function VenuesTable({ shows }: { shows: ProcessedData['shows'] }) {
               <td className="px-4 py-2.5 text-secondary-foreground">{show.venue}</td>
               <td className="px-4 py-2.5 text-center font-mono text-primary">{show.setListNumber}</td>
               <td className="px-4 py-2.5 text-xs text-muted-foreground">{show.comments}</td>
+              <td className="px-4 py-2.5 text-xs text-muted-foreground truncate max-w-[200px]">{show.sourceFile}</td>
             </tr>
           ))}
         </tbody>

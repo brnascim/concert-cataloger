@@ -7,7 +7,7 @@ export function exportToCsv(data: ProcessedData): void {
   rows.push([
     'Artist', 'Date', 'Territory', 'City', 'Venue', 'Set List #',
     'Song Order', 'Song Title', 'Composers', 'BMG Control',
-    'iMaestro Code', 'PRS Tunecode', 'Show Comments', 'Song Comments'
+    'iMaestro Code', 'PRS Tunecode', 'Show Comments', 'Song Comments', 'Source File'
   ]);
 
   for (const show of data.shows) {
@@ -20,7 +20,7 @@ export function exportToCsv(data: ProcessedData): void {
           String(show.setListNumber), String(i + 1),
           song.songTitle, song.composers, song.bmgControl,
           song.iMaestroSongCode, song.prsTunecode,
-          show.comments, song.comments,
+          show.comments, song.comments, show.sourceFile,
         ]);
       }
     }

@@ -9,7 +9,7 @@ export async function exportToExcel(data: ProcessedData): Promise<void> {
   const dvHeaders = [
     'Artist', 'Date', 'Territory', 'City', 'Venue', 'Venue Address',
     'PRS Venue ID', 'Local Promoter Contact Info', 'Comments',
-    'Set List Number', 'Headliner Y/N', 'Headliner if N'
+    'Set List Number', 'Headliner Y/N', 'Headliner if N', 'Source File'
   ];
   dvSheet.addRow(dvHeaders);
   dvSheet.getRow(1).font = { bold: true };
@@ -18,7 +18,7 @@ export async function exportToExcel(data: ProcessedData): Promise<void> {
     dvSheet.addRow([
       s.artist, s.date, s.territory, s.city, s.venue, s.venueAddress,
       s.prsVenueId, s.localPromoterContactInfo, s.comments,
-      s.setListNumber, s.headlinerYN, s.headlinerIfN,
+      s.setListNumber, s.headlinerYN, s.headlinerIfN, s.sourceFile,
     ]);
   }
 
