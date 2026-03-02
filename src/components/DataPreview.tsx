@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Wrench } from 'lucide-react';
+import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Wrench, ShieldCheck } from 'lucide-react';
 import type { ProcessedData } from '@/lib/types';
 import { exportToExcel } from '@/lib/exporter';
 import { exportToCsv } from '@/lib/csvExporter';
 import { sanitizeData, type SanitizationReport } from '@/lib/sanitizer';
+import { runQAAudit, type AuditReport } from '@/lib/qaAuditor';
 import { useI18n } from '@/lib/i18n';
 
 interface DataPreviewProps {
@@ -14,10 +15,12 @@ export function DataPreview({ data }: DataPreviewProps) {
   const [activeTab, setActiveTab] = useState<string>('venues');
   const [showSanitization, setShowSanitization] = useState(false);
   const [showQuality, setShowQuality] = useState(false);
+  const [showAudit, setShowAudit] = useState(false);
   const { t } = useI18n();
 
-  // Run sanitization pipeline
-  const { data: sanitized, report } = useMemo(() => sanitizeData(data), [data]);
+  // Run sanitization pipeline then QA audit (v1.2)
+  const { data: sanitizedRaw, report } = useMemo(() => sanitizeData(data), [data]);
+  const { data: sanitized, audit } = useMemo(() => runQAAudit(sanitizedRaw), [sanitizedRaw]);
 
   const totalSongs = sanitized.setlists.reduce((sum, sl) => sum + sl.songs.length, 0);
   const totalCorrections = report.correction1_dateInArtist + report.correction1_tourInArtist +
@@ -102,7 +105,56 @@ export function DataPreview({ data }: DataPreviewProps) {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* QA Audit Report (v1.2) */}
+      {audit.totalChecked > 0 && (
+        <div className="rounded-lg bg-card border border-border p-5">
+          <button
+            onClick={() => setShowAudit(!showAudit)}
+            className="w-full flex items-center justify-between text-sm font-semibold text-primary uppercase tracking-wider"
+          >
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Auditoria de Qualidade — {audit.totalFixed} corrigidos, {audit.totalWarnings} avisos
+            </span>
+            {showAudit ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {showAudit && (
+            <div className="mt-3 space-y-2 max-h-60 overflow-y-auto">
+              {audit.issues.length === 0 ? (
+                <p className="text-sm text-success flex items-center gap-1">
+                  <CheckCircle className="h-4 w-4" /> Todos os campos passaram na auditoria.
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    <div className="rounded bg-secondary p-2 text-center">
+                      <p className="text-lg font-bold text-foreground">{audit.totalChecked}</p>
+                      <p className="text-xs text-muted-foreground">Campos verificados</p>
+                    </div>
+                    <div className="rounded bg-secondary p-2 text-center">
+                      <p className="text-lg font-bold text-success">{audit.totalFixed}</p>
+                      <p className="text-xs text-muted-foreground">Auto-corrigidos</p>
+                    </div>
+                    <div className="rounded bg-secondary p-2 text-center">
+                      <p className="text-lg font-bold text-warning">{audit.totalWarnings}</p>
+                      <p className="text-xs text-muted-foreground">Avisos pendentes</p>
+                    </div>
+                  </div>
+                  {audit.issues.filter(i => !i.autoFixed).map((issue, idx) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs">
+                      <AlertTriangle className="h-3 w-3 mt-0.5 text-warning shrink-0" />
+                      <span className="text-muted-foreground">
+                        <strong>[{issue.sheet} L{issue.row}]</strong> {issue.description}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-1 overflow-x-auto rounded-lg bg-secondary p-1">
         {tabs.map(tab => (
           <button

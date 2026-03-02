@@ -19,15 +19,17 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
   let currentSongs: SongEntry[] = [];
   let inBis = false;
 
-  for (const line of lines) {
-    // Detect artist line
-    const artistMatch = line.match(/^(?:artista|artist|banda|band|künstler|artiste)\s*:\s*(.+)/i);
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const line = lines[lineIdx];
+
+    // Detect artist line (multi-language labels)
+    const artistMatch = line.match(/^(?:artista|artist|banda|band|künstler|artiste|act)\s*:\s*(.+)/i);
     if (artistMatch) {
       currentArtist = artistMatch[1].trim();
       continue;
     }
 
-    // Detect date/venue line: "Data: DD/MM/YYYY — Venue, City, Territory" or similar
+    // Detect date/venue combined line: "Data: DD/MM/YYYY — Venue, City, Territory"
     const dateVenueMatch = line.match(/^(?:data|date|datum|fecha)\s*:\s*(.+?)\s*[—–\-]\s*(.+)/i);
     if (dateVenueMatch) {
       if (currentSongs.length > 0) finishShow();
@@ -52,8 +54,23 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
       continue;
     }
 
+    // Detect standalone date (no label): DD/MM/YYYY or DD.MM.YYYY at start of line
+    const standaloneDateMatch = line.match(/^(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})(?:\s*[—–\-]\s*(.+))?$/);
+    if (standaloneDateMatch && !currentDate) {
+      if (currentSongs.length > 0) finishShow();
+      currentDate = normalizeDate(standaloneDateMatch[1]);
+      if (standaloneDateMatch[2]) {
+        const rest = standaloneDateMatch[2].split(',').map(s => s.trim());
+        currentVenue = rest[0] || currentVenue;
+        currentCity = rest[1] || currentCity;
+      }
+      currentSongs = [];
+      inBis = false;
+      continue;
+    }
+
     // Detect venue line (multi-language)
-    const venueMatch = line.match(/^(?:venue|local|casa de show|lieu|ort|lugar|sala)\s*:\s*(.+)/i);
+    const venueMatch = line.match(/^(?:venue|local|casa de show|lieu|ort|lugar|sala|location)\s*:\s*(.+)/i);
     if (venueMatch) {
       const parts = venueMatch[1].split(',').map(s => s.trim());
       currentVenue = parts[0] || '';
@@ -70,7 +87,7 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
     }
 
     // Detect territory line
-    const territoryMatch = line.match(/^(?:territory|país|pais|country|region|região)\s*:\s*(.+)/i);
+    const territoryMatch = line.match(/^(?:territory|país|pais|country|region|região|pays|land)\s*:\s*(.+)/i);
     if (territoryMatch) {
       currentTerritory = inferTerritory(territoryMatch[1].trim()) || territoryMatch[1].trim();
       continue;
@@ -82,29 +99,35 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
       continue;
     }
 
-    // Detect separator
+    // Detect separator (----, ====, etc.)
     if (/^[-=_]{3,}$/.test(line)) {
       if (currentSongs.length > 0) finishShow();
       continue;
     }
 
-    // Detect song line: "1. Song Title" or "- Song Title" or "• Song Title"
-    const songMatch = line.match(/^(?:\d+[\.\)\-]|\-|\•|\*)\s*(.+)/);
+    // Detect numbered/bulleted song line: "1. Song" or "- Song" or "• Song" or "1) Song"
+    const songMatch = line.match(/^(?:\d+[\.\)\-\:]|\-|\•|\*|\>)\s*(.+)/);
     if (songMatch) {
       const title = songMatch[1].trim();
-      currentSongs.push({
-        songTitle: title,
-        composers: currentArtist || '',
-        bmgControl: '',
-        iMaestroSongCode: '',
-        prsTunecode: '',
-        comments: inBis ? 'Bis' : '',
-      });
+      if (title.length >= 2) {
+        currentSongs.push({
+          songTitle: title,
+          composers: currentArtist || '',
+          bmgControl: '',
+          iMaestroSongCode: '',
+          prsTunecode: '',
+          comments: inBis ? 'Bis' : '',
+        });
+      }
       continue;
     }
 
-    // If we have a date set and the line looks like a song title
-    if (currentDate && !line.includes(':') && line.length > 1 && line.length < 100) {
+    // If we have a date set and the line looks like a song title (no label, reasonable length)
+    if (currentDate && !line.includes(':') && line.length >= 2 && line.length < 120) {
+      // Skip lines that look like headers or metadata
+      if (/^(set\s*list|setlist|repertório|tracklist|encore|bis|page|página)/i.test(line)) continue;
+      if (/^(total|end|fim|note|obs)/i.test(line)) continue;
+
       currentSongs.push({
         songTitle: line,
         composers: currentArtist || '',
@@ -162,6 +185,28 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
   return { shows, setlists, alerts };
 }
 
+/**
+ * Extract potential artist name from the file path/name.
+ * e.g. "AYMO/AYMO Tour 2025_Setlist.pdf" → "AYMO"
+ * e.g. "2025 SET LIST/AYMO/setlist.txt" → "AYMO"
+ */
+function inferArtistFromPath(fileName: string): string {
+  const segments = fileName.replace(/\\/g, '/').split('/').filter(Boolean);
+  if (segments.length > 1) {
+    const folder = segments[segments.length - 2].trim();
+    const generic = ['set list', 'setlist', 'setlists', 'dates', 'tour', 'shows', 'music', 'documents', 'downloads', '2024', '2025', '2026'];
+    if (folder && !generic.some(g => folder.toLowerCase().includes(g))) {
+      return folder;
+    }
+  }
+  const baseName = segments[segments.length - 1].replace(/\.[^.]+$/, '');
+  const artistFromName = baseName.match(/^([A-Za-zÀ-ÿ\s]+?)[\s_\-]+(tour|dates|setlist|set list|2\d{3})/i);
+  if (artistFromName) {
+    return artistFromName[1].trim();
+  }
+  return '';
+}
+
 export async function processFiles(files: UploadedFile[]): Promise<ProcessedData> {
   const allShows: ShowEntry[] = [];
   const allSetlists: SetlistData[] = [];
@@ -176,6 +221,9 @@ export async function processFiles(files: UploadedFile[]): Promise<ProcessedData
     const isDocx = ext.endsWith('.docx');
     const isRtf = ext.endsWith('.rtf');
     let result: { shows: ShowEntry[]; setlists: SetlistData[]; alerts: string[] };
+
+    // Infer artist from folder/filename context (v1.2)
+    const folderArtist = inferArtistFromPath(file.name);
 
     try {
       if (isXlsx) {
@@ -205,6 +253,16 @@ export async function processFiles(files: UploadedFile[]): Promise<ProcessedData
       allAlerts.push(msg);
       fileStatuses.push({ name: file.name, status: 'failure', alerts: [msg], rejectedLines: 0 });
       continue;
+    }
+
+    // v1.2: Propagate folder artist to shows missing artist
+    if (folderArtist) {
+      for (const show of result.shows) {
+        if (!show.artist || !show.artist.trim()) {
+          show.artist = folderArtist;
+          allAlerts.push(`[${file.name}]: Artista "${folderArtist}" inferido do nome da pasta/arquivo.`);
+        }
+      }
     }
 
     // Validate shows

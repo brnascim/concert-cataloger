@@ -35,16 +35,18 @@ export function FileUploadZone({ onFilesLoaded }: FileUploadZoneProps) {
     for (const file of files) {
       const ext = file.name.toLowerCase();
       const isBinary = ext.endsWith('.xlsx') || ext.endsWith('.xlsm') || ext.endsWith('.docx');
+      // Preserve folder path from webkitRelativePath if available
+      const fullName = (file as any).webkitRelativePath || file.name;
       if (isBinary) {
         // Read as binary string for ExcelJS / mammoth
         const buffer = await file.arrayBuffer();
         const binary = Array.from(new Uint8Array(buffer))
           .map(b => String.fromCharCode(b))
           .join('');
-        loaded.push({ name: file.name, content: binary, type: file.type || 'application/octet-stream' });
+        loaded.push({ name: fullName, content: binary, type: file.type || 'application/octet-stream' });
       } else {
         const content = await file.text();
-        loaded.push({ name: file.name, content, type: file.type || 'text/plain' });
+        loaded.push({ name: fullName, content, type: file.type || 'text/plain' });
       }
     }
 
