@@ -9,8 +9,7 @@
  * 6. Hallucination guard: flags inferred data
  */
 import type { ProcessedData, ShowEntry, SongEntry } from './types';
-import { fillMissing, normalizeComposers, INFO_NAO_LOCALIZADA } from './infoNaoLocalizada';
-import { isTerritoryCodInArtist, isVenueJustNumber } from './validator';
+import { normalizeComposers, INFO_NAO_LOCALIZADA } from './infoNaoLocalizada';
 
 export interface AuditIssue {
   type: 'blank_field' | 'date_format' | 'composer_separator' | 'yn_format' | 'artist_conflict' | 'hallucination' | 'data_guard';
@@ -49,6 +48,7 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
   let totalChecked = 0;
   let totalFixed = 0;
   const highlightedShowRows = new Set<number>();
+
   const shows = data.shows.map((s, i) => {
     const show = { ...s };
     const row = i + 1;
@@ -104,39 +104,6 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
       }
     }
 
-    // v1.3 Data Guard §3.1: Territory code in Artist field
-    totalChecked++;
-    if (show.artist && show.artist !== INFO_NAO_LOCALIZADA && isTerritoryCodInArtist(show.artist)) {
-      const code = show.artist.trim();
-      highlightedShowRows.add(row);
-      if (!show.territory || show.territory === INFO_NAO_LOCALIZADA) {
-        show.territory = code.toUpperCase();
-      }
-      show.artist = INFO_NAO_LOCALIZADA;
-      issues.push({
-        type: 'data_guard', field: 'artist', row, sheet: 'Dates & Venues',
-        description: `Código territorial "${code}" detectado na coluna Artist → movido para Territory`,
-        autoFixed: true,
-      });
-      totalFixed++;
-    }
-
-    // v1.3 Data Guard §3.3: Venue is just a number
-    totalChecked++;
-    if (show.venue && show.venue !== INFO_NAO_LOCALIZADA && isVenueJustNumber(show.venue)) {
-      const num = show.venue.trim();
-      show.comments = show.comments === INFO_NAO_LOCALIZADA
-        ? `[Venue numérico original: ${num}]`
-        : `${show.comments} [Venue numérico original: ${num}]`.trim();
-      show.venue = INFO_NAO_LOCALIZADA;
-      issues.push({
-        type: 'hallucination', field: 'venue', row, sheet: 'Dates & Venues',
-        description: `Venue "${num}" é apenas um número → movido para Comments`,
-        autoFixed: true,
-      });
-      totalFixed++;
-    }
-
     // Check folder artist conflict
     if (folderArtist && show.artist && show.artist !== INFO_NAO_LOCALIZADA) {
       totalChecked++;
@@ -158,8 +125,39 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
     return show;
   });
 
+  for (const [index, show] of shows.entries()) {
+    const artist = (show.artist || '').trim();
+    if (!artist || artist === INFO_NAO_LOCALIZADA) continue;
+
+    totalChecked++;
+    if (TERRITORY_CODE_REGEX.test(artist) || INVALID_ARTIST_REGEX.test(artist)) {
+      highlightedShowRows.add(index + 1);
+      issues.push({
+        type: 'data_guard',
+        field: 'artist',
+        row: index + 1,
+        sheet: 'Dates & Venues',
+        description: `Data Guard: coluna Artist contém valor inválido "${artist}" (território/código). Reprocessar com foco em Header Inheritance.`,
+        autoFixed: false,
+      });
+    }
+  }
+
+  totalChecked++;
+  const maxExpectedShows = Math.max(1, data.filesProcessed) * EXPECTED_SHOWS_PER_FILE_UPPER_BOUND * EXPLOSION_MULTIPLIER;
+  if (shows.length > maxExpectedShows) {
+    issues.push({
+      type: 'data_guard',
+      field: 'shows',
+      row: 0,
+      sheet: 'Dates & Venues',
+      description: `Data Guard: contagem de shows (${shows.length}) excede o limite de sanidade (${maxExpectedShows}) para ${Math.max(1, data.filesProcessed)} arquivo(s). Reprocessar com foco na estrutura de cabeçalho.`,
+      autoFixed: false,
+    });
+  }
+
   // Audit setlists
-  const setlists = data.setlists.map((sl, slIdx) => {
+  const setlists = data.setlists.map((sl) => {
     const songs = sl.songs.map((s, i) => {
       const song = { ...s };
       const row = i + 1;
@@ -220,41 +218,6 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
 
   const warnings = issues.filter(i => !i.autoFixed);
 
-  // Data Guard: detect record explosion
-  const blockedReasons: string[] = [];
-  const filesProcessed = data.filesProcessed || 1;
-  const expectedMax = filesProcessed * EXPECTED_SHOWS_PER_FILE_UPPER_BOUND * EXPLOSION_MULTIPLIER;
-  if (shows.length > expectedMax) {
-    blockedReasons.push(`Explosão de registros: ${shows.length} shows detectados (limite esperado: ${expectedMax}). Possível erro de parsing.`);
-  }
-
-  // Data Guard: check for territory codes or pure numbers as artists
-  shows.forEach((show, i) => {
-    const artist = show.artist?.trim();
-    if (artist && artist !== INFO_NAO_LOCALIZADA) {
-      if (TERRITORY_CODE_REGEX.test(artist) || INVALID_ARTIST_REGEX.test(artist)) {
-        highlightedShowRows.add(i + 1);
-        if (!issues.some(iss => iss.type === 'data_guard' && iss.row === i + 1 && iss.field === 'artist')) {
-          issues.push({
-            type: 'data_guard', field: 'artist', row: i + 1, sheet: 'Dates & Venues',
-            description: `Artist "${artist}" parece ser código territorial ou número — possível erro de extração`,
-            autoFixed: false,
-          });
-        }
-      }
-    }
-  });
-
-  if (highlightedShowRows.size > 0) {
-    blockedReasons.push(`${highlightedShowRows.size} registro(s) com Artist inválido (código territorial ou numérico).`);
-  }
-
-  const dataGuard: DataGuardReport = {
-    blocked: blockedReasons.length > 0,
-    blockedReasons,
-    highlightedShowRows: Array.from(highlightedShowRows),
-  };
-
   return {
     data: { ...data, shows, setlists },
     audit: {
@@ -262,7 +225,11 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
       totalChecked,
       totalFixed,
       totalWarnings: warnings.length,
-      dataGuard,
+      dataGuard: {
+        blocked: issues.some(i => i.type === 'data_guard'),
+        blockedReasons: issues.filter(i => i.type === 'data_guard').map(i => i.description),
+        highlightedShowRows: Array.from(highlightedShowRows),
+      },
     },
   };
 }

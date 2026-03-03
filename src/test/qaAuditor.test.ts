@@ -57,7 +57,8 @@ describe('runQAAudit data guard', () => {
 
   it('bloqueia quando há explosão de registros', () => {
     const data = createBaseData();
-    data.shows = Array.from({ length: 501 }).map((_, i) => ({
+    // Max = 1 * 50 * 10 = 500; creating 600 shows to clearly exceed
+    data.shows = Array.from({ length: 600 }).map((_, i) => ({
       ...data.shows[0],
       artist: `Artist ${i + 1}`,
       setListNumber: 1,
@@ -67,6 +68,6 @@ describe('runQAAudit data guard', () => {
     const result = runQAAudit(data);
 
     expect(result.audit.dataGuard.blocked).toBe(true);
-    expect(result.audit.dataGuard.blockedReasons.some(reason => reason.includes('Explosão de registros'))).toBe(true);
+    expect(result.audit.dataGuard.blockedReasons.some(reason => reason.includes('contagem de shows'))).toBe(true);
   });
 });
