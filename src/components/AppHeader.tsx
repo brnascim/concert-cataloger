@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 
 interface AppHeaderProps {
-  activeTab: 'import' | 'search';
-  onTabChange: (tab: 'import' | 'search') => void;
+  activeTab: 'import' | 'search' | 'docs';
+  onTabChange: (tab: 'import' | 'search' | 'docs') => void;
 }
 
 export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
@@ -52,6 +52,14 @@ export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
               }`}
             >
               🔍 {t('navSearch')}
+            </button>
+            <button
+              onClick={() => onTabChange('docs')}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                activeTab === 'docs' ? 'bg-card text-primary glow-amber-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              📄 Docs
             </button>
           </nav>
         </div>
