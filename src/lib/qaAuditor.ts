@@ -108,12 +108,13 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
     totalChecked++;
     if (show.artist && show.artist !== INFO_NAO_LOCALIZADA && isTerritoryCodInArtist(show.artist)) {
       const code = show.artist.trim();
+      highlightedShowRows.add(row);
       if (!show.territory || show.territory === INFO_NAO_LOCALIZADA) {
         show.territory = code.toUpperCase();
       }
       show.artist = INFO_NAO_LOCALIZADA;
       issues.push({
-        type: 'hallucination', field: 'artist', row, sheet: 'Dates & Venues',
+        type: 'data_guard', field: 'artist', row, sheet: 'Dates & Venues',
         description: `Código territorial "${code}" detectado na coluna Artist → movido para Territory`,
         autoFixed: true,
       });
