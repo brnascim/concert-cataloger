@@ -1,12 +1,24 @@
 import { useState, useMemo } from 'react';
-import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Wrench, ShieldCheck, RotateCcw, Save, FileText, Filter, FilterX } from 'lucide-react';
-import type { ProcessedData } from '@/lib/types';
+import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Wrench, ShieldCheck, RotateCcw, Save, FileText, Filter } from 'lucide-react';
+import type { ProcessedData, ShowEntry } from '@/lib/types';
 import { exportToExcel } from '@/lib/exporter';
 import { exportToCsv } from '@/lib/csvExporter';
 import { sanitizeData, type SanitizationReport } from '@/lib/sanitizer';
 import { runQAAudit, type AuditReport } from '@/lib/qaAuditor';
 import { useI18n } from '@/lib/i18n';
 import { INFO_NAO_LOCALIZADA } from '@/lib/infoNaoLocalizada';
+
+type QualityFilter = 'all' | 'invalid' | 'suspect' | 'valid';
+
+function classifyShow(s: ShowEntry): 'invalid' | 'suspect' | 'valid' {
+  const vals = [s.artist, s.date, s.city, s.venue];
+  const missing = vals.filter(v => !v || !v.trim() || v === INFO_NAO_LOCALIZADA).length;
+  if (missing >= 2) return 'invalid';
+  const extras = [s.territory, s.venueAddress, s.comments];
+  const partialMissing = extras.filter(v => !v || !v.trim() || v === INFO_NAO_LOCALIZADA).length;
+  if (missing >= 1 || partialMissing >= 2) return 'suspect';
+  return 'valid';
+}
 
 interface DataPreviewProps {
   data: ProcessedData;
@@ -19,7 +31,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
   const [showSanitization, setShowSanitization] = useState(false);
   const [showQuality, setShowQuality] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
-  const [filterErrors, setFilterErrors] = useState(false);
+  const [qualityFilter, setQualityFilter] = useState<QualityFilter>('all');
   const { t } = useI18n();
 
   // Run sanitization pipeline then QA audit (v1.2)
@@ -33,14 +45,23 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
     report.correction6_datesNormalized + report.correction7_cancelledShows +
     report.correction8_djBpmExtracted + report.correction9_territoryInferred;
 
-  // Filter shows that have "informação não localizada" or audit issues
+  // Classify all shows
+  const showClassifications = useMemo(() => {
+    const map = new Map<number, 'invalid' | 'suspect' | 'valid'>();
+    sanitized.shows.forEach((s, i) => map.set(i, classifyShow(s)));
+    return map;
+  }, [sanitized.shows]);
+
+  const counts = useMemo(() => {
+    let invalid = 0, suspect = 0, valid = 0;
+    showClassifications.forEach(c => { if (c === 'invalid') invalid++; else if (c === 'suspect') suspect++; else valid++; });
+    return { invalid, suspect, valid };
+  }, [showClassifications]);
+
   const filteredShows = useMemo(() => {
-    if (!filterErrors) return sanitized.shows;
-    return sanitized.shows.filter(s => {
-      const values = [s.artist, s.date, s.territory, s.city, s.venue, s.venueAddress, s.comments];
-      return values.some(v => v === INFO_NAO_LOCALIZADA || !v || !v.trim());
-    });
-  }, [sanitized.shows, filterErrors]);
+    if (qualityFilter === 'all') return sanitized.shows;
+    return sanitized.shows.filter((_, i) => showClassifications.get(i) === qualityFilter);
+  }, [sanitized.shows, qualityFilter, showClassifications]);
 
   const tabs = [
     { id: 'venues', label: 'Dates & Venues', icon: Calendar },
@@ -91,18 +112,45 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
             </button>
           </div>
 
-          {/* Quality Filter Toggle */}
-          <button
-            onClick={() => setFilterErrors(!filterErrors)}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all border ${
-              filterErrors
-                ? 'bg-warning/15 text-warning border-warning/30'
-                : 'bg-secondary text-secondary-foreground border-border hover:bg-secondary/80'
-            }`}
-          >
-            {filterErrors ? <FilterX className="h-3.5 w-3.5" /> : <Filter className="h-3.5 w-3.5" />}
-            {filterErrors ? 'Mostrar todos' : 'Apenas com erros'}
-          </button>
+          {/* Quality Filter Buttons */}
+          <div className="flex items-center gap-1 rounded-lg bg-secondary p-1 border border-border">
+            <button
+              onClick={() => setQualityFilter('all')}
+              className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                qualityFilter === 'all' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Filter className="h-3 w-3" />
+              Todos
+            </button>
+            <button
+              onClick={() => setQualityFilter('invalid')}
+              className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                qualityFilter === 'invalid' ? 'bg-destructive/15 text-destructive shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <XCircle className="h-3 w-3" />
+              {counts.invalid} inválidos
+            </button>
+            <button
+              onClick={() => setQualityFilter('suspect')}
+              className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                qualityFilter === 'suspect' ? 'bg-warning/15 text-warning shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {counts.suspect} suspeitos
+            </button>
+            <button
+              onClick={() => setQualityFilter('valid')}
+              className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                qualityFilter === 'valid' ? 'bg-success/15 text-success shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <CheckCircle className="h-3 w-3" />
+              {counts.valid} válidos
+            </button>
+          </div>
         </div>
       </div>
 
@@ -244,8 +292,8 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
         )}
       </div>
 
-      {filterErrors && filteredShows.length === 0 && (
-        <p className="text-center text-sm text-success py-4">✅ Nenhuma linha com erros encontrada!</p>
+      {qualityFilter !== 'all' && filteredShows.length === 0 && (
+        <p className="text-center text-sm text-muted-foreground py-4">Nenhum registro encontrado para este filtro.</p>
       )}
     </div>
   );
