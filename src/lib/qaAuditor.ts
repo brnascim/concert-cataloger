@@ -10,6 +10,7 @@
  */
 import type { ProcessedData, ShowEntry, SongEntry } from './types';
 import { fillMissing, normalizeComposers, INFO_NAO_LOCALIZADA } from './infoNaoLocalizada';
+import { isTerritoryCodInArtist, isVenueJustNumber } from './validator';
 
 export interface AuditIssue {
   type: 'blank_field' | 'date_format' | 'composer_separator' | 'yn_format' | 'artist_conflict' | 'hallucination';
@@ -90,6 +91,38 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
           autoFixed: false,
         });
       }
+    }
+
+    // v1.3 Data Guard §3.1: Territory code in Artist field
+    totalChecked++;
+    if (show.artist && show.artist !== INFO_NAO_LOCALIZADA && isTerritoryCodInArtist(show.artist)) {
+      const code = show.artist.trim();
+      if (!show.territory || show.territory === INFO_NAO_LOCALIZADA) {
+        show.territory = code.toUpperCase();
+      }
+      show.artist = INFO_NAO_LOCALIZADA;
+      issues.push({
+        type: 'hallucination', field: 'artist', row, sheet: 'Dates & Venues',
+        description: `Código territorial "${code}" detectado na coluna Artist → movido para Territory`,
+        autoFixed: true,
+      });
+      totalFixed++;
+    }
+
+    // v1.3 Data Guard §3.3: Venue is just a number
+    totalChecked++;
+    if (show.venue && show.venue !== INFO_NAO_LOCALIZADA && isVenueJustNumber(show.venue)) {
+      const num = show.venue.trim();
+      show.comments = show.comments === INFO_NAO_LOCALIZADA
+        ? `[Venue numérico original: ${num}]`
+        : `${show.comments} [Venue numérico original: ${num}]`.trim();
+      show.venue = INFO_NAO_LOCALIZADA;
+      issues.push({
+        type: 'hallucination', field: 'venue', row, sheet: 'Dates & Venues',
+        description: `Venue "${num}" é apenas um número → movido para Comments`,
+        autoFixed: true,
+      });
+      totalFixed++;
     }
 
     // Check folder artist conflict

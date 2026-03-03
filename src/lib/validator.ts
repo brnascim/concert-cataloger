@@ -25,7 +25,24 @@ const NOISE_LINE_PATTERNS = [
   /^\d+\s*of\s*\d+$/i,
   /^(printed|generated|created)\s+(on|at|by)/i,
   /^(www\.|http|email|tel:|fax:|phone)/i,
+  /^(end\s+of|document|appendix|annex|attachment)/i,
+  /^(all\s+rights|proprietary|privileged|for\s+internal)/i,
 ];
+
+/** Territory codes that must NEVER appear as Artist names (v1.3 Data Guard) */
+const TERRITORY_CODES = /^(DE|FR|UK|US|EU|BR|JPN|AUS|LATAM|INTL|CHN|ASIA|IT|ES|PT|NL|BE|AT|CH|SE|NO|DK|FI|PL|CZ|RO|HU|GR|IE|Scandinavia|Sub-Pub)$/i;
+
+/** Check if Artist contains a territory code instead of a name (v1.3 §3.1) */
+export function isTerritoryCodInArtist(artist: string): boolean {
+  if (!artist) return false;
+  return TERRITORY_CODES.test(artist.trim());
+}
+
+/** Check if Venue is just an isolated number (v1.3 §3.3) */
+export function isVenueJustNumber(venue: string): boolean {
+  if (!venue) return false;
+  return /^\d{1,4}$/.test(venue.trim());
+}
 
 export function isValidShow(show: ShowEntry): boolean {
   // A show must have at least a Date or a Venue

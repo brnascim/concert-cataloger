@@ -1,4 +1,5 @@
-import { Music, Globe, LogOut } from 'lucide-react';
+import { Globe, LogOut } from 'lucide-react';
+import bmgLogo from '@/assets/bmg-logo.png';
 import { useTheme, type Theme } from '@/lib/theme';
 import { useI18n, LOCALE_LABELS, type Locale } from '@/lib/i18n';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -27,9 +28,7 @@ export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
         {/* Logo + Tabs */}
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg gradient-primary">
-              <Music className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <img src={bmgLogo} alt="BMG" className="h-9 w-9 rounded-lg object-cover" />
             <div>
               <h1 className="text-lg font-bold text-foreground tracking-tight">{t('appName')}</h1>
               <p className="text-xs text-muted-foreground hidden sm:block">{t('appSubtitle')}</p>

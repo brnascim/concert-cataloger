@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import { loginComEmail, loginComGoogle, type LocalSession } from '@/lib/localAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useTheme, type Theme } from '@/lib/theme';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import bmgLogo from '@/assets/bmg-logo.png';
 
-interface AuthPageProps {
-  onLogin: (session: LocalSession) => void;
-}
+type AuthMode = 'login' | 'signup';
 
-export function AuthPage({ onLogin }: AuthPageProps) {
+export function AuthPage() {
+  const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -24,33 +26,56 @@ export function AuthPage({ onLogin }: AuthPageProps) {
     { id: 'bmg', label: '🎵 BMG' },
   ];
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      const sessao = loginComEmail(email, password);
-      onLogin(sessao);
-    } catch (err: any) {
-      toast({ title: 'Login failed', description: err.message, variant: 'destructive' });
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) {
+      toast({ title: 'Login falhou', description: error.message, variant: 'destructive' });
     }
     setLoading(false);
   };
 
-  const handleGoogleLogin = () => {
-    try {
-      const sessao = loginComGoogle();
-      onLogin(sessao);
-    } catch {
-      toast({ title: 'Google login failed', description: 'Não foi possível entrar com Google.', variant: 'destructive' });
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    const { error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: window.location.origin,
+      },
+    });
+    if (error) {
+      toast({ title: 'Cadastro falhou', description: error.message, variant: 'destructive' });
+    } else {
+      toast({
+        title: 'Verifique seu email',
+        description: 'Enviamos um link de confirmação para ' + email.trim() + '. Confirme antes de fazer login.',
+      });
+      setMode('login');
     }
+    setLoading(false);
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    const { error } = await lovable.auth.signInWithOAuth('google', {
+      redirect_uri: window.location.origin,
+    });
+    if (error) {
+      toast({ title: 'Google login falhou', description: String(error), variant: 'destructive' });
+    }
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-[440px] space-y-6">
         {/* Logo */}
-        <div className="text-center space-y-2">
-          <div className="text-4xl mb-2">🎵</div>
+        <div className="text-center space-y-3">
+          <img src={bmgLogo} alt="BMG Logo" className="mx-auto h-20 w-20 rounded-xl object-cover" />
           <h1 className="text-2xl font-bold text-foreground">Setlist Agent</h1>
           <p className="text-muted-foreground text-sm">
             Extraction & standardization of music setlists
@@ -59,12 +84,13 @@ export function AuthPage({ onLogin }: AuthPageProps) {
 
         {/* Form Card */}
         <div className="rounded-2xl border border-border bg-card p-8 space-y-5 shadow-lg">
-          {/* Google OAuth (simulado) */}
+          {/* Google OAuth */}
           <Button
             type="button"
             variant="outline"
             className="w-full font-medium gap-2"
             onClick={handleGoogleLogin}
+            disabled={loading}
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" fill="#4285F4"/>
@@ -78,12 +104,46 @@ export function AuthPage({ onLogin }: AuthPageProps) {
           {/* Divider */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <div className="flex-1 h-px bg-border" />
-            <span>ou entre com email</span>
+            <span>{mode === 'login' ? 'ou entre com email' : 'ou cadastre-se com email'}</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
+          {/* Tab toggle */}
+          <div className="flex rounded-lg bg-secondary p-1">
+            <button
+              onClick={() => setMode('login')}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
+                mode === 'login' ? 'bg-card text-primary glow-amber-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Entrar
+            </button>
+            <button
+              onClick={() => setMode('signup')}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
+                mode === 'signup' ? 'bg-card text-primary glow-amber-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Cadastrar
+            </button>
+          </div>
+
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={mode === 'login' ? handleLogin : handleSignup} className="space-y-4">
+            {mode === 'signup' && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground">Nome completo</label>
+                <Input
+                  type="text"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  required
+                  placeholder="Seu nome"
+                  autoComplete="name"
+                />
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground">Email</label>
               <Input
@@ -97,7 +157,7 @@ export function AuthPage({ onLogin }: AuthPageProps) {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Password</label>
+              <label className="text-sm font-medium text-foreground">Senha</label>
               <div className="relative">
                 <Input
                   type={showPass ? 'text' : 'password'}
@@ -106,14 +166,14 @@ export function AuthPage({ onLogin }: AuthPageProps) {
                   required
                   minLength={6}
                   placeholder="••••••••"
-                  autoComplete="current-password"
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                   className="pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPass(!showPass)}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={showPass ? 'Hide password' : 'Show password'}
+                  aria-label={showPass ? 'Esconder senha' : 'Mostrar senha'}
                 >
                   {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -121,14 +181,16 @@ export function AuthPage({ onLogin }: AuthPageProps) {
             </div>
 
             <Button type="submit" className="w-full font-semibold" disabled={loading}>
-              {loading ? '⏳ ...' : 'Sign In'}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === 'login' ? 'Entrar' : 'Criar Conta'}
             </Button>
           </form>
         </div>
 
-        {/* Restricted access notice */}
+        {/* Info */}
         <p className="text-center text-sm text-muted-foreground">
-          Acesso restrito a usuários autorizados. Contate seu administrador.
+          {mode === 'login'
+            ? 'Não tem conta? Clique em "Cadastrar" acima.'
+            : 'Após o cadastro, confirme seu email para acessar.'}
         </p>
 
         {/* Theme Switcher */}
