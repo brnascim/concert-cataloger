@@ -13,7 +13,7 @@ import { fillMissing, normalizeComposers, INFO_NAO_LOCALIZADA } from './infoNaoL
 import { isTerritoryCodInArtist, isVenueJustNumber } from './validator';
 
 export interface AuditIssue {
-  type: 'blank_field' | 'date_format' | 'composer_separator' | 'yn_format' | 'artist_conflict' | 'hallucination';
+  type: 'blank_field' | 'date_format' | 'composer_separator' | 'yn_format' | 'artist_conflict' | 'hallucination' | 'data_guard';
   field: string;
   row: number;
   sheet: string;
@@ -21,14 +21,25 @@ export interface AuditIssue {
   autoFixed: boolean;
 }
 
+export interface DataGuardReport {
+  blocked: boolean;
+  blockedReasons: string[];
+  highlightedShowRows: number[];
+}
+
 export interface AuditReport {
   issues: AuditIssue[];
   totalChecked: number;
   totalFixed: number;
   totalWarnings: number;
+  dataGuard: DataGuardReport;
 }
 
 const DATE_REGEX = /^\d{2}\/\d{2}\/\d{4}$/;
+const TERRITORY_CODE_REGEX = /^[A-Z]{2}$/;
+const INVALID_ARTIST_REGEX = /^\d+$/;
+const EXPECTED_SHOWS_PER_FILE_UPPER_BOUND = 50;
+const EXPLOSION_MULTIPLIER = 10;
 
 /**
  * Run full QA audit on processed data, fixing what can be fixed and flagging what can't.
@@ -37,7 +48,7 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
   const issues: AuditIssue[] = [];
   let totalChecked = 0;
   let totalFixed = 0;
-
+  const highlightedShowRows = new Set<number>();
   const shows = data.shows.map((s, i) => {
     const show = { ...s };
     const row = i + 1;
@@ -208,6 +219,41 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
 
   const warnings = issues.filter(i => !i.autoFixed);
 
+  // Data Guard: detect record explosion
+  const blockedReasons: string[] = [];
+  const filesProcessed = data.filesProcessed || 1;
+  const expectedMax = filesProcessed * EXPECTED_SHOWS_PER_FILE_UPPER_BOUND * EXPLOSION_MULTIPLIER;
+  if (shows.length > expectedMax) {
+    blockedReasons.push(`Explosão de registros: ${shows.length} shows detectados (limite esperado: ${expectedMax}). Possível erro de parsing.`);
+  }
+
+  // Data Guard: check for territory codes or pure numbers as artists
+  shows.forEach((show, i) => {
+    const artist = show.artist?.trim();
+    if (artist && artist !== INFO_NAO_LOCALIZADA) {
+      if (TERRITORY_CODE_REGEX.test(artist) || INVALID_ARTIST_REGEX.test(artist)) {
+        highlightedShowRows.add(i + 1);
+        if (!issues.some(iss => iss.type === 'data_guard' && iss.row === i + 1 && iss.field === 'artist')) {
+          issues.push({
+            type: 'data_guard', field: 'artist', row: i + 1, sheet: 'Dates & Venues',
+            description: `Artist "${artist}" parece ser código territorial ou número — possível erro de extração`,
+            autoFixed: false,
+          });
+        }
+      }
+    }
+  });
+
+  if (highlightedShowRows.size > 0) {
+    blockedReasons.push(`${highlightedShowRows.size} registro(s) com Artist inválido (código territorial ou numérico).`);
+  }
+
+  const dataGuard: DataGuardReport = {
+    blocked: blockedReasons.length > 0,
+    blockedReasons,
+    highlightedShowRows: Array.from(highlightedShowRows),
+  };
+
   return {
     data: { ...data, shows, setlists },
     audit: {
@@ -215,6 +261,7 @@ export function runQAAudit(data: ProcessedData, folderArtist?: string): { data: 
       totalChecked,
       totalFixed,
       totalWarnings: warnings.length,
+      dataGuard,
     },
   };
 }

@@ -37,6 +37,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
   // Run sanitization pipeline then QA audit (v1.2)
   const { data: sanitizedRaw, report } = useMemo(() => sanitizeData(data), [data]);
   const { data: sanitized, audit } = useMemo(() => runQAAudit(sanitizedRaw), [sanitizedRaw]);
+  const isBlockedByDataGuard = audit.dataGuard.blocked;
 
   const totalSongs = sanitized.setlists.reduce((sum, sl) => sum + sl.songs.length, 0);
   const totalCorrections = report.correction1_dateInArtist + report.correction1_tourInArtist +
@@ -98,13 +99,15 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
             )}
             <button
               onClick={() => exportToExcel(sanitized)}
-              className="flex items-center gap-1.5 rounded-md gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all glow-amber-sm"
+              disabled={isBlockedByDataGuard}
+              className="flex items-center gap-1.5 rounded-md gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all glow-amber-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="h-3.5 w-3.5" />
               📊 {t('exportExcel')}
             </button>
             <button
               onClick={() => exportToCsv(sanitized)}
+              disabled={isBlockedByDataGuard}
               className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border"
             >
               <Download className="h-3.5 w-3.5" />
@@ -265,6 +268,20 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
         </div>
       )}
 
+      {isBlockedByDataGuard && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4">
+          <p className="text-sm font-semibold text-destructive flex items-center gap-2">
+            <Ban className="h-4 w-4" />
+            Data Guard bloqueou a exportação: reprocese os arquivos com foco em Header Inheritance.
+          </p>
+          <ul className="mt-2 list-disc pl-5 text-xs text-destructive/90 space-y-1">
+            {audit.dataGuard.blockedReasons.map((reason, idx) => (
+              <li key={idx}>{reason}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div className="flex gap-1 overflow-x-auto rounded-lg bg-secondary p-1">
         {tabs.map(tab => (
           <button
@@ -284,7 +301,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
 
       {/* Table Content */}
       <div className="rounded-lg border border-border overflow-hidden">
-        {activeTab === 'venues' && <VenuesTable shows={filteredShows} />}
+        {activeTab === 'venues' && <VenuesTable shows={filteredShows} highlightedRows={audit.dataGuard.highlightedShowRows} />}
         {sanitized.setlists.map(sl =>
           activeTab === `setlist-${sl.number}` ? (
             <SetlistTable key={sl.number} songs={sl.songs} />
@@ -383,7 +400,8 @@ function StatWithIcon({ label, value, icon }: { label: string; value: number; ic
   );
 }
 
-function VenuesTable({ shows }: { shows: ProcessedData['shows'] }) {
+function VenuesTable({ shows, highlightedRows = [] }: { shows: ProcessedData['shows']; highlightedRows?: number[] }) {
+  const highlighted = new Set(highlightedRows);
   const cols = ['Artist', 'Date', 'Territory', 'City', 'Venue', 'Set List #', 'Comments', 'Source File'];
   return (
     <div className="overflow-x-auto">
@@ -397,7 +415,7 @@ function VenuesTable({ shows }: { shows: ProcessedData['shows'] }) {
         </thead>
         <tbody>
           {shows.map((show, i) => (
-            <tr key={i} className={i % 2 === 1 ? 'bg-table-row-alt' : ''}>
+            <tr key={i} className={highlighted.has(i + 1) ? 'bg-destructive/20' : i % 2 === 1 ? 'bg-table-row-alt' : ''}>
               <td className="px-4 py-2.5 font-medium text-foreground">{show.artist}</td>
               <td className="px-4 py-2.5 font-mono text-sm text-muted-foreground">{show.date}</td>
               <td className="px-4 py-2.5">
