@@ -6,10 +6,11 @@ import { processFiles } from '@/lib/parser';
 import { useI18n } from '@/lib/i18n';
 import type { ProcessedData, UploadedFile } from '@/lib/types';
 import SearchPage from '@/pages/Search';
+import DocumentationPage from '@/pages/Documentation';
 
 const Index = () => {
   const [data, setData] = useState<ProcessedData | null>(null);
-  const [activeTab, setActiveTab] = useState<'import' | 'search'>('import');
+  const [activeTab, setActiveTab] = useState<'import' | 'search' | 'docs'>('import');
   const { t } = useI18n();
 
   const handleFilesLoaded = async (files: UploadedFile[]) => {
@@ -22,7 +23,6 @@ const Index = () => {
   const handleSaveDraft = (sanitizedData: ProcessedData) => {
     try {
       localStorage.setItem('setlist_draft', JSON.stringify(sanitizedData));
-      // Simple feedback via alert — could be replaced with toast
       alert('Rascunho salvo com sucesso!');
     } catch {
       alert('Erro ao salvar rascunho.');
@@ -46,8 +46,10 @@ const Index = () => {
           ) : (
             <DataPreview data={data} onReset={handleReset} onSaveDraft={handleSaveDraft} />
           )
-        ) : (
+        ) : activeTab === 'search' ? (
           <SearchPage />
+        ) : (
+          <DocumentationPage />
         )}
       </main>
     </div>
