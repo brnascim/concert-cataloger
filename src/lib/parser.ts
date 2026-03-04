@@ -229,19 +229,26 @@ function parseTxtContent(content: string, fileName: string): { shows: ShowEntry[
 /**
  * Extract potential artist name from the file path/name.
  */
+/** Remove generic terms from a folder/file name to extract just the artist */
+function stripGenericTerms(name: string): string {
+  const genericTerms = /\b(set\s*lists?|setlists?|tour|dates|shows?|music|documents?|downloads?|tracklist|repertório|20\d{2})\b/gi;
+  return name.replace(genericTerms, '').replace(/[\s_\-]+/g, ' ').trim();
+}
+
 function inferArtistFromPath(fileName: string): string {
   const segments = fileName.replace(/\\/g, '/').split('/').filter(Boolean);
   if (segments.length > 1) {
     const folder = segments[segments.length - 2].trim();
-    const generic = ['set list', 'setlist', 'setlists', 'dates', 'tour', 'shows', 'music', 'documents', 'downloads', '2024', '2025', '2026'];
-    if (folder && !generic.some(g => folder.toLowerCase().includes(g))) {
-      return folder;
+    const cleaned = stripGenericTerms(folder);
+    if (cleaned) {
+      return cleaned;
     }
     // Also check grandparent folder
     if (segments.length > 2) {
       const grandparent = segments[segments.length - 3].trim();
-      if (grandparent && !generic.some(g => grandparent.toLowerCase().includes(g))) {
-        return grandparent;
+      const cleanedGP = stripGenericTerms(grandparent);
+      if (cleanedGP) {
+        return cleanedGP;
       }
     }
   }
