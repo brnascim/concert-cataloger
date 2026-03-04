@@ -64,10 +64,11 @@ Response JSON schema:
   ]
 }`;
 
-    // Compact payload to avoid timeouts
+    // Compact payload — include sourceFile for folder logic
     const compactShows = shows.slice(0, 50).map((s: any, i: number) => ({
       i, artist: s.artist, date: s.date, territory: s.territory,
       city: s.city, venue: s.venue, headliner: s.headlinerYN,
+      sourceFile: s.sourceFile,
     }));
     const compactSetlists = setlists.slice(0, 10).map((sl: any) => ({
       n: sl.number,
@@ -76,7 +77,7 @@ Response JSON schema:
       })),
     }));
 
-    const userPrompt = `Analyze this live performance data:\n\nSHOWS (${shows.length} total, first ${compactShows.length}):\n${JSON.stringify(compactShows)}\n\nSETLISTS (${setlists.length} total, first ${compactSetlists.length}):\n${JSON.stringify(compactSetlists)}\n\nReturn JSON review.`;
+    const userPrompt = `Analyze this live performance data:\n\nSHOWS (${shows.length} total, first ${compactShows.length}):\n${JSON.stringify(compactShows)}\n\nSETLISTS (${setlists.length} total, first ${compactSetlists.length}):\n${JSON.stringify(compactSetlists)}\n\nIMPORTANT: The "sourceFile" field contains the original file path including folder names. The folder name typically represents the ARTIST name. Use this context to validate and correct artist attributions. If the artist field doesn't match the folder name, flag it as a warning and suggest the folder-based artist name.\n\nReturn JSON review.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

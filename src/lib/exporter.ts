@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import type { ProcessedData } from './types';
 import { fillMissing, normalizeComposers } from './infoNaoLocalizada';
 import type { Locale } from './i18n';
+import type { AIReviewResult } from './aiReview';
 
 /** Dark teal/blue header — matching BMG corporate report style */
 const HEADER_FILL: ExcelJS.Fill = {
@@ -72,7 +73,7 @@ function styleBody(sheet: ExcelJS.Worksheet, startRow: number) {
   }
 }
 
-export async function exportToExcel(data: ProcessedData, locale: Locale = 'pt'): Promise<void> {
+export async function exportToExcel(data: ProcessedData, locale: Locale = 'pt', aiReview?: AIReviewResult | null): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   const fm = (v: string | null | undefined) => fillMissing(v, locale);
   const nc = (v: string) => normalizeComposers(v, locale);
@@ -82,25 +83,33 @@ export async function exportToExcel(data: ProcessedData, locale: Locale = 'pt'):
   const dvHeaders = [
     'Artist', 'Date', 'Territory', 'City', 'Venue', 'Venue Address',
     'PRS Venue ID', 'Local Promoter Contact Info', 'Comments',
-    'Set List Number', 'Headliner Y/N', 'Headliner if N', 'Source File'
+    'Set List Number', 'Headliner Y/N', 'Headliner if N', 'Source File',
   ];
+  if (aiReview) dvHeaders.push('AI Comments');
   dvSheet.addRow(dvHeaders);
   styleHeaders(dvSheet);
 
-  for (const s of data.shows) {
-    dvSheet.addRow([
+  for (let idx = 0; idx < data.shows.length; idx++) {
+    const s = data.shows[idx];
+    const row = [
       fm(s.artist), fm(s.date), fm(s.territory),
       fm(s.city), fm(s.venue), fm(s.venueAddress),
       fm(s.prsVenueId), fm(s.localPromoterContactInfo),
       fm(s.comments), s.setListNumber,
       fm(s.headlinerYN), fm(s.headlinerIfN),
       fm(s.sourceFile),
-    ]);
+    ];
+    if (aiReview) {
+      const issues = aiReview.showIssues.filter(i => i.rowIndex === idx);
+      row.push(issues.map(i => `[${i.type}] ${i.field}: ${i.message}${i.suggestedValue ? ` → ${i.suggestedValue}` : ''}`).join('\n') || '');
+    }
+    dvSheet.addRow(row);
   }
 
   styleBody(dvSheet, 2);
   // Column widths matching reference layout
   const dvWidths = [16, 12, 10, 16, 22, 28, 14, 26, 28, 14, 12, 16, 18];
+  if (aiReview) dvWidths.push(30);
   dvWidths.forEach((w, i) => { dvSheet.getColumn(i + 1).width = w; });
 
   // Setlist sheets
@@ -111,7 +120,9 @@ export async function exportToExcel(data: ProcessedData, locale: Locale = 'pt'):
 
   for (const sl of data.setlists) {
     const slSheet = workbook.addWorksheet(`Set List ${sl.number}`);
-    slSheet.addRow(slHeaders);
+    const sheetHeaders = [...slHeaders];
+    if (aiReview) sheetHeaders.push('AI Comments');
+    slSheet.addRow(sheetHeaders);
     styleHeaders(slSheet);
 
     for (let i = 0; i < sl.songs.length; i++) {
@@ -119,15 +130,21 @@ export async function exportToExcel(data: ProcessedData, locale: Locale = 'pt'):
       const title = s.songTitle?.trim()
         ? s.songTitle
         : `[${locale === 'en' ? 'title not found' : locale === 'es' ? 'título no localizado' : locale === 'de' ? 'Titel nicht gefunden' : 'título não localizado'} — ${locale === 'en' ? 'track' : locale === 'es' ? 'pista' : locale === 'de' ? 'Track' : 'faixa'} ${i + 1}]`;
-      slSheet.addRow([
+      const row: any[] = [
         title, nc(s.composers), fm(s.bmgControl),
         fm(s.iMaestroSongCode), fm(s.prsTunecode),
         fm(s.comments),
-      ]);
+      ];
+      if (aiReview) {
+        const issues = aiReview.songIssues.filter(iss => iss.setlistNumber === sl.number && iss.songIndex === i);
+        row.push(issues.map(iss => `[${iss.type}] ${iss.field}: ${iss.message}${iss.suggestedValue ? ` → ${iss.suggestedValue}` : ''}${iss.confidence ? ` (${iss.confidence})` : ''}`).join('\n') || '');
+      }
+      slSheet.addRow(row);
     }
 
     styleBody(slSheet, 2);
     const slWidths = [30, 28, 14, 18, 16, 24];
+    if (aiReview) slWidths.push(30);
     slWidths.forEach((w, i) => { slSheet.getColumn(i + 1).width = w; });
   }
 
