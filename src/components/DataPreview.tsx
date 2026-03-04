@@ -272,14 +272,17 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
         </div>
 
         {data.alerts.length > 0 && (
-          <div className="mt-4 space-y-1">
-            <p className="text-xs font-semibold text-warning flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" /> {t('alertsTitle')}
-            </p>
-            {data.alerts.map((alert, i) => (
-              <p key={i} className="text-xs text-muted-foreground ml-4">• {alert}</p>
-            ))}
-          </div>
+          <details className="mt-4 group">
+            <summary className="text-xs font-semibold text-warning flex items-center gap-1 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+              <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+              <AlertTriangle className="h-3 w-3" /> {t('alertsTitle')} ({data.alerts.length})
+            </summary>
+            <div className="mt-1 space-y-1">
+              {data.alerts.map((alert, i) => (
+                <p key={i} className="text-xs text-muted-foreground ml-4">• {alert}</p>
+              ))}
+            </div>
+          </details>
         )}
       </div>
 
