@@ -71,11 +71,33 @@ export async function requestAIReview(data: ProcessedData): Promise<AIReviewResu
 }
 
 /**
- * Apply AI suggestions to the data: auto-fill fields that have suggested values
+ * Categorize an issue for approval grouping
  */
-export function applyAISuggestions(data: ProcessedData, review: AIReviewResult): ProcessedData {
+export function categorizeIssue(issue: AIShowIssue | AISongIssue): string {
+  const msg = (issue.message || '').toLowerCase();
+  const field = (issue.field || '').toLowerCase();
+  if (field === 'territory' || msg.includes('territory') || msg.includes('iso') || msg.includes('território')) return 'territory_normalization';
+  if (field === 'artist' || msg.includes('artist') || msg.includes('artista') || msg.includes('folder') || msg.includes('pasta')) return 'artist_correction';
+  if (field === 'composers' || field === 'composer' || msg.includes('composer') || msg.includes('compositor')) return 'composer_attribution';
+  if (field === 'date' || msg.includes('date') || msg.includes('data') || msg.includes('datum')) return 'date_normalization';
+  if (field === 'venue' || field === 'city' || msg.includes('venue') || msg.includes('city') || msg.includes('local') || msg.includes('cidade')) return 'venue_city_correction';
+  if (field === 'songtitle' || field === 'title' || field === 'song_title' || msg.includes('title') || msg.includes('título')) return 'title_normalization';
+  if (field === 'bmgcontrol' || field === 'bmg_control' || field === 'bmg' || msg.includes('bmg')) return 'bmg_control';
+  if (field === 'headliner' || msg.includes('headliner')) return 'headliner_correction';
+  return 'other';
+}
+
+/**
+ * Apply AI suggestions to the data, filtering by approved categories
+ */
+export function applyAISuggestions(data: ProcessedData, review: AIReviewResult, approvedCategories?: Set<string>): ProcessedData {
+  const isApproved = (issue: AIShowIssue | AISongIssue) => {
+    if (!approvedCategories) return true; // all approved if no filter
+    return approvedCategories.has(categorizeIssue(issue));
+  };
+
   const shows = data.shows.map((show, i) => {
-    const issues = review.showIssues.filter(iss => iss.rowIndex === i && iss.suggestedValue);
+    const issues = review.showIssues.filter(iss => iss.rowIndex === i && iss.suggestedValue && isApproved(iss));
     if (issues.length === 0) return show;
     const updated = { ...show };
     for (const issue of issues) {
@@ -93,7 +115,7 @@ export function applyAISuggestions(data: ProcessedData, review: AIReviewResult):
   const setlists = data.setlists.map(sl => {
     const songs = sl.songs.map((song, si) => {
       const issues = review.songIssues.filter(
-        iss => iss.setlistNumber === sl.number && iss.songIndex === si && iss.suggestedValue
+        iss => iss.setlistNumber === sl.number && iss.songIndex === si && iss.suggestedValue && isApproved(iss)
       );
       if (issues.length === 0) return song;
       const updated = { ...song };
