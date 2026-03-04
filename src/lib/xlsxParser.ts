@@ -73,13 +73,43 @@ function findTitleColumn(headers: string[]): number {
   return -1;
 }
 
+/** Extract plain string from any ExcelJS cell value (handles rich text, formulas, etc.) */
+function cellToString(value: ExcelJS.CellValue): string {
+  if (value == null) return '';
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'object') {
+    // Rich text: { richText: [{ text: '2' }, { text: 'ND', font: {...} }, ...] }
+    if ('richText' in value && Array.isArray((value as any).richText)) {
+      return (value as any).richText.map((part: any) => String(part.text ?? '')).join('');
+    }
+    // Formula result: { formula: '...', result: 'value' }
+    if ('result' in value) {
+      return cellToString((value as any).result);
+    }
+    // Shared formula: { sharedFormula: '...', result: 'value' }
+    if ('sharedFormula' in value) {
+      return cellToString((value as any).result);
+    }
+    // Hyperlink: { text: '...', hyperlink: '...' }
+    if ('text' in value && typeof (value as any).text === 'string') {
+      return (value as any).text;
+    }
+    // Error value: { error: '#REF!' }
+    if ('error' in value) {
+      return '';
+    }
+    return String(value);
+  }
+  return String(value);
+}
+
 function worksheetToJson(worksheet: ExcelJS.Worksheet): { headers: string[]; data: Record<string, unknown>[] } {
   const headers: string[] = [];
   const data: Record<string, unknown>[] = [];
 
   const headerRow = worksheet.getRow(1);
   headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    headers[colNumber - 1] = String(cell.value ?? `Column${colNumber}`).trim();
+    headers[colNumber - 1] = cellToString(cell.value).trim() || `Column${colNumber}`;
   });
 
   if (headers.length === 0) return { headers, data };
@@ -90,9 +120,15 @@ function worksheetToJson(worksheet: ExcelJS.Worksheet): { headers: string[]; dat
     let hasValue = false;
     headers.forEach((h, idx) => {
       const cell = row.getCell(idx + 1);
-      const val = cell.value;
-      record[h] = val instanceof Date ? val : (val ?? '');
-      if (val !== null && val !== undefined && val !== '') hasValue = true;
+      const raw = cell.value;
+      // Preserve Date objects for date normalization, convert everything else to string
+      if (raw instanceof Date) {
+        record[h] = raw;
+      } else {
+        const str = cellToString(raw);
+        record[h] = str;
+        if (str !== '') hasValue = true;
+      }
     });
     if (hasValue) data.push(record);
   }
