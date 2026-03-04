@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useTheme, type Theme } from '@/lib/theme';
+import { useI18n } from '@/lib/i18n';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import bmgLogo from '@/assets/bmg-logo.png';
 
@@ -19,11 +20,12 @@ export function AuthPage() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
+  const { t } = useI18n();
 
   const themes: { id: Theme; label: string }[] = [
-    { id: 'light', label: '☀️ Light' },
-    { id: 'dark', label: '🌑 Dark' },
-    { id: 'bmg', label: '🎵 BMG' },
+    { id: 'light', label: t('themeLight') },
+    { id: 'dark', label: t('themeDark') },
+    { id: 'bmg', label: t('themeBmg') },
   ];
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -31,7 +33,7 @@ export function AuthPage() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) {
-      toast({ title: 'Login falhou', description: error.message, variant: 'destructive' });
+      toast({ title: t('loginFailed'), description: error.message, variant: 'destructive' });
     }
     setLoading(false);
   };
@@ -48,11 +50,11 @@ export function AuthPage() {
       },
     });
     if (error) {
-      toast({ title: 'Cadastro falhou', description: error.message, variant: 'destructive' });
+      toast({ title: t('signupFailed'), description: error.message, variant: 'destructive' });
     } else {
       toast({
-        title: 'Verifique seu email',
-        description: 'Enviamos um link de confirmação para ' + email.trim() + '. Confirme antes de fazer login.',
+        title: t('verifyEmail'),
+        description: t('verifyEmailDesc', { email: email.trim() }),
       });
       setMode('login');
     }
@@ -65,7 +67,7 @@ export function AuthPage() {
       redirect_uri: window.location.origin,
     });
     if (error) {
-      toast({ title: 'Google login falhou', description: String(error), variant: 'destructive' });
+      toast({ title: t('googleLoginFailed'), description: String(error), variant: 'destructive' });
     }
     setLoading(false);
   };
@@ -76,10 +78,8 @@ export function AuthPage() {
         {/* Logo */}
         <div className="text-center space-y-3">
           <img src={bmgLogo} alt="BMG Logo" className="mx-auto h-20 w-20 rounded-xl object-cover" />
-          <h1 className="text-2xl font-bold text-foreground">Setlist Agent</h1>
-          <p className="text-muted-foreground text-sm">
-            Extraction & standardization of music setlists
-          </p>
+          <h1 className="text-2xl font-bold text-foreground">{t('appName')}</h1>
+          <p className="text-muted-foreground text-sm">{t('authSubtitle')}</p>
         </div>
 
         {/* Form Card */}
@@ -98,13 +98,13 @@ export function AuthPage() {
               <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
               <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
             </svg>
-            Entrar com Google
+            {t('loginWithGoogle')}
           </Button>
 
           {/* Divider */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <div className="flex-1 h-px bg-border" />
-            <span>{mode === 'login' ? 'ou entre com email' : 'ou cadastre-se com email'}</span>
+            <span>{mode === 'login' ? t('orLoginWithEmail') : t('orSignupWithEmail')}</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
@@ -116,7 +116,7 @@ export function AuthPage() {
                 mode === 'login' ? 'bg-card text-primary glow-amber-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Entrar
+              {t('login')}
             </button>
             <button
               onClick={() => setMode('signup')}
@@ -124,7 +124,7 @@ export function AuthPage() {
                 mode === 'signup' ? 'bg-card text-primary glow-amber-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              Cadastrar
+              {t('signup')}
             </button>
           </div>
 
@@ -132,20 +132,20 @@ export function AuthPage() {
           <form onSubmit={mode === 'login' ? handleLogin : handleSignup} className="space-y-4">
             {mode === 'signup' && (
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Nome completo</label>
+                <label className="text-sm font-medium text-foreground">{t('fullName')}</label>
                 <Input
                   type="text"
                   value={fullName}
                   onChange={e => setFullName(e.target.value)}
                   required
-                  placeholder="Seu nome"
+                  placeholder={t('fullNamePlaceholder')}
                   autoComplete="name"
                 />
               </div>
             )}
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Email</label>
+              <label className="text-sm font-medium text-foreground">{t('emailLabel')}</label>
               <Input
                 type="email"
                 value={email}
@@ -157,7 +157,7 @@ export function AuthPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Senha</label>
+              <label className="text-sm font-medium text-foreground">{t('passwordLabel')}</label>
               <div className="relative">
                 <Input
                   type={showPass ? 'text' : 'password'}
@@ -173,7 +173,7 @@ export function AuthPage() {
                   type="button"
                   onClick={() => setShowPass(!showPass)}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label={showPass ? 'Esconder senha' : 'Mostrar senha'}
+                  aria-label={showPass ? t('hidePassword') : t('showPassword')}
                 >
                   {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -181,16 +181,14 @@ export function AuthPage() {
             </div>
 
             <Button type="submit" className="w-full font-semibold" disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === 'login' ? 'Entrar' : 'Criar Conta'}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === 'login' ? t('login') : t('createAccount')}
             </Button>
           </form>
         </div>
 
         {/* Info */}
         <p className="text-center text-sm text-muted-foreground">
-          {mode === 'login'
-            ? 'Não tem conta? Clique em "Cadastrar" acima.'
-            : 'Após o cadastro, confirme seu email para acessar.'}
+          {mode === 'login' ? t('noAccountHint') : t('afterSignupHint')}
         </p>
 
         {/* Theme Switcher */}

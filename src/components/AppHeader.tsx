@@ -58,7 +58,7 @@ export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
                 activeTab === 'docs' ? 'bg-card text-primary glow-amber-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              📄 Docs
+              📄 {t('navDocs')}
             </button>
           </nav>
         </div>
@@ -100,7 +100,7 @@ export function AppHeader({ activeTab, onTabChange }: AppHeaderProps) {
           )}
 
           <Button variant="ghost" size="sm" onClick={signOut} className="gap-1.5 text-xs">
-            <LogOut className="h-3.5 w-3.5" /> Sign Out
+            <LogOut className="h-3.5 w-3.5" /> {t('signOut')}
           </Button>
         </div>
       </div>

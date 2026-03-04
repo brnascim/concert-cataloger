@@ -60,11 +60,12 @@ function ConfidenceBadge({ score, level }: { score: number; level: ConfidenceLev
 
 // Fuzzy variants alert (M17)
 function FuzzyAlert({ query, variants }: { query: string; variants: string[] }) {
+  const { t } = useI18n();
   if (variants.length === 0) return null;
   return (
     <div className="rounded-md bg-warning/10 border border-warning/30 px-3 py-2 text-sm text-secondary-foreground mb-3">
-      🔍 Showing results for: <strong>{query}</strong>
-      {' — also including similar: '}
+      🔍 {t('fuzzyShowingResults')} <strong>{query}</strong>
+      {' '}{t('fuzzyAlsoIncluding')}{' '}
       {variants.map(v => (
         <span key={v} className="inline-block bg-warning/20 text-primary rounded px-1.5 py-0.5 text-xs font-semibold ml-1">{v}</span>
       ))}
@@ -388,10 +389,10 @@ export default function SearchPage() {
             </Select>
           </FilterField>
           <FilterField label={`${t('imaestroCode')} 🎯`} hint="exact">
-            <Input value={imaestroCode} onChange={e => setImaestroCode(e.target.value)} placeholder="Exact match" />
+            <Input value={imaestroCode} onChange={e => setImaestroCode(e.target.value)} placeholder={t('exactMatch')} />
           </FilterField>
           <FilterField label={`${t('prsTunecode')} 🎯`} hint="exact">
-            <Input value={prsTunecode} onChange={e => setPrsTunecode(e.target.value)} placeholder="Exact match" />
+            <Input value={prsTunecode} onChange={e => setPrsTunecode(e.target.value)} placeholder={t('exactMatch')} />
           </FilterField>
           <FilterField label={t('status')}>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
