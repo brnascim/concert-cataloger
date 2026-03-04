@@ -1,19 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, createContext, useContext, type ReactNode } from 'react';
 
 export type Locale = 'pt' | 'en' | 'es' | 'de';
 
 const translations = {
   pt: {
-    // App
     appName: 'Setlist Agent',
     appSubtitle: 'Extração e padronização de setlists musicais',
-    
-    // Nav
     navImport: 'Importação',
     navSearch: 'Consulta',
     navDocs: 'Docs',
-    
-    // Upload
     uploadTitle: 'Importe seus arquivos de setlist',
     uploadDesc: 'Envie arquivos TXT, CSV, DOCX, PDF ou XLSX e receba um Excel padronizado com shows e setlists.',
     dragDrop: 'Arraste arquivos ou pastas aqui, ou clique para selecionar',
@@ -21,8 +16,6 @@ const translations = {
     selectFolder: '📂 Selecionar Pasta Inteira',
     processing: 'Processando...',
     processFiles: 'Processar {count} arquivo{plural}',
-    
-    // Auth
     authSubtitle: 'Extração e padronização de setlists musicais',
     loginWithGoogle: 'Entrar com Google',
     orLoginWithEmail: 'ou entre com email',
@@ -44,8 +37,6 @@ const translations = {
     showPassword: 'Mostrar senha',
     hidePassword: 'Esconder senha',
     signOut: 'Sair',
-
-    // Results
     result: 'Resultado',
     newProcessing: '← Novo processamento',
     reportTitle: '📊 Relatório de Processamento',
@@ -61,15 +52,11 @@ const translations = {
     saveDraft: '💾 Salvar Rascunho',
     draftSaved: 'Rascunho salvo com sucesso!',
     draftSaveError: 'Erro ao salvar rascunho.',
-
-    // Quality filter
     filterAll: 'Todos',
     filterInvalid: 'inválidos',
     filterSuspect: 'suspeitos',
     filterValid: 'válidos',
     noFilterResults: 'Nenhum registro encontrado para este filtro.',
-    
-    // Table headers
     artist: 'Artista',
     date: 'Data',
     territory: 'Território',
@@ -85,13 +72,9 @@ const translations = {
     sourceFile: 'Arquivo Fonte',
     datesAndVenues: 'Datas & Venues',
     setListN: 'Set List {n}',
-    
-    // Export
     exportExcel: 'Exportar Excel (.xlsx)',
     exportCsv: 'Exportar CSV',
     exportResults: 'Exportar Resultados',
-    
-    // Sanitization
     sanitizationTitle: '🧹 Saneamento Aplicado',
     qualityTitle: '📋 Qualidade por Artista',
     corrShiftedCols: 'Colunas deslocadas corrigidas',
@@ -105,8 +88,6 @@ const translations = {
     corrDjBpm: 'BPM/Key DJ extraídos',
     corrTerritory: 'Território inferido de comentários',
     avgScore: 'Score médio',
-    
-    // QA Audit
     qaAuditTitle: 'Auditoria de Qualidade',
     qaFixed: 'corrigidos',
     qaWarnings: 'avisos',
@@ -115,8 +96,6 @@ const translations = {
     qaAutoFixed: 'Auto-corrigidos',
     qaPendingWarnings: 'Avisos pendentes',
     dataGuardBlocked: 'Data Guard bloqueou a exportação: reprocese os arquivos com foco em Header Inheritance.',
-    
-    // Search
     searchTitle: 'Consulta de Setlists',
     searchBtn: 'Buscar',
     clearFilters: 'Limpar filtros',
@@ -140,8 +119,6 @@ const translations = {
     fuzzyShowingResults: 'Mostrando resultados para:',
     fuzzyAlsoIncluding: '— também incluindo similares:',
     exactMatch: 'Correspondência exata',
-    
-    // Documentation
     docTitle: 'Documentação Técnica',
     docHeading: 'Gerador de Documentação Completa',
     docDesc: 'Gera automaticamente um arquivo .txt com a descrição técnica aprofundada de todo o código da aplicação.',
@@ -161,21 +138,13 @@ const translations = {
     docRegenPreview: 'Regerar Preview',
     docDownload: '📥 Baixar documentacao_tecnica_completa.txt',
     docGenSuccess: 'Documentação gerada com sucesso!',
-    
-    // Theme
     themeLight: '☀️ Claro',
     themeDark: '🌑 Escuro',
     themeBmg: '🎵 BMG',
-    
-    // Language
     language: 'Idioma',
-    
-    // 404
     notFoundTitle: '404',
     notFoundMessage: 'Oops! Página não encontrada',
     notFoundBack: 'Voltar ao início',
-
-    // Quality table headers
     qualityLines: 'Linhas',
   },
   en: {
@@ -624,7 +593,16 @@ export function getStoredLocale(): Locale {
   return 'pt';
 }
 
-export function useI18n() {
+// Shared i18n context so all components react to locale changes
+interface I18nContextValue {
+  locale: Locale;
+  setLocale: (l: Locale) => void;
+  t: (key: TranslationKey, vars?: Record<string, string | number>) => string;
+}
+
+const I18nContext = createContext<I18nContextValue | null>(null);
+
+export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(getStoredLocale);
 
   const setLocale = useCallback((l: Locale) => {
@@ -642,7 +620,19 @@ export function useI18n() {
     return text;
   }, [locale]);
 
-  return { locale, setLocale, t };
+  return (
+    <I18nContext.Provider value={{ locale, setLocale, t }}>
+      {children}
+    </I18nContext.Provider>
+  );
+}
+
+export function useI18n(): I18nContextValue {
+  const ctx = useContext(I18nContext);
+  if (!ctx) {
+    throw new Error('useI18n must be used within an I18nProvider');
+  }
+  return ctx;
 }
 
 export const LOCALE_LABELS: Record<Locale, string> = {
