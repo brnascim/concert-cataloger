@@ -6,19 +6,27 @@ import { exportToCsv } from '@/lib/csvExporter';
 import { sanitizeData, type SanitizationReport } from '@/lib/sanitizer';
 import { runQAAudit, type AuditReport } from '@/lib/qaAuditor';
 import { useI18n } from '@/lib/i18n';
-import { INFO_NAO_LOCALIZADA } from '@/lib/infoNaoLocalizada';
-import { requestAIReview, applyAISuggestions, generateWorksList, type AIReviewResult, type AIShowIssue, type AISongIssue, type WorksListResult } from '@/lib/aiReview';
+// placeholder matching is handled by isMissing() function below
+import { requestAIReview, applyAISuggestions, generateWorksList, categorizeIssue, type AIReviewResult, type AIShowIssue, type AISongIssue, type WorksListResult } from '@/lib/aiReview';
 import { exportWorksList } from '@/lib/worksListExporter';
+import { AISuggestionApproval } from './AISuggestionApproval';
 import { toast } from 'sonner';
 
 type QualityFilter = 'all' | 'invalid' | 'suspect' | 'valid';
 
+const ALL_PLACEHOLDERS = ['informação não localizada', 'information not found', 'información no localizada', 'information nicht gefunden'];
+
+function isMissing(v: string | null | undefined): boolean {
+  if (!v || !v.trim()) return true;
+  return ALL_PLACEHOLDERS.includes(v.trim().toLowerCase());
+}
+
 function classifyShow(s: ShowEntry): 'invalid' | 'suspect' | 'valid' {
   const vals = [s.artist, s.date, s.city, s.venue];
-  const missing = vals.filter(v => !v || !v.trim() || v === INFO_NAO_LOCALIZADA).length;
+  const missing = vals.filter(v => isMissing(v)).length;
   if (missing >= 2) return 'invalid';
   const extras = [s.territory, s.venueAddress, s.comments];
-  const partialMissing = extras.filter(v => !v || !v.trim() || v === INFO_NAO_LOCALIZADA).length;
+  const partialMissing = extras.filter(v => isMissing(v)).length;
   if (missing >= 1 || partialMissing >= 2) return 'suspect';
   return 'valid';
 }
@@ -40,6 +48,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [aiEnhancedData, setAiEnhancedData] = useState<ProcessedData | null>(null);
   const [worksLoading, setWorksLoading] = useState(false);
+  const [showApprovalPanel, setShowApprovalPanel] = useState(false);
   const { t, locale } = useI18n();
 
   const { data: sanitizedRaw, report } = useMemo(() => sanitizeData(data), [data]);
@@ -104,17 +113,37 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
       setAiReview(result);
       setShowAiPanel(true);
       
-      // Auto-fill suggested values
-      const enhanced = applyAISuggestions(sanitized, result);
-      setAiEnhancedData(enhanced);
-      
-      const suggestionsApplied = [...result.showIssues, ...result.songIssues].filter(i => i.suggestedValue).length;
-      toast.success(`AI Review: Score ${result.qualityScore}/100${suggestionsApplied > 0 ? ` — ${suggestionsApplied} ${t('aiSuggestionsApplied')}` : ''}`);
+      // Check if there are suggestions to approve
+      const hasSuggestions = [...result.showIssues, ...result.songIssues].some(i => i.suggestedValue);
+      if (hasSuggestions) {
+        setShowApprovalPanel(true);
+        toast.info(t('aiReviewTitle'), { description: `Score: ${result.qualityScore}/100` });
+      } else {
+        toast.success(`AI Review: Score ${result.qualityScore}/100`);
+      }
     } catch (err: any) {
       toast.error(t('aiError'), { description: err.message });
     } finally {
       setAiLoading(false);
     }
+  };
+
+  const handleApproveCategories = (approvedCategories: Set<string>) => {
+    if (!aiReview) return;
+    const enhanced = applyAISuggestions(sanitized, aiReview, approvedCategories);
+    setAiEnhancedData(enhanced);
+    setShowApprovalPanel(false);
+    
+    const totalSuggestions = [...aiReview.showIssues, ...aiReview.songIssues].filter(i => i.suggestedValue).length;
+    const appliedCount = [...aiReview.showIssues, ...aiReview.songIssues]
+      .filter(i => i.suggestedValue && approvedCategories.has(categorizeIssue(i))).length;
+    
+    toast.success(t('aiApprovalApplied', { count: appliedCount, total: totalSuggestions }));
+  };
+
+  const handleCancelApproval = () => {
+    setShowApprovalPanel(false);
+    // Don't apply any suggestions
   };
 
   const handleExportWithAI = () => {
@@ -284,7 +313,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
               <p className="text-sm text-muted-foreground">{aiReview.summary}</p>
 
               {/* Auto-fill notice */}
-              {[...aiReview.showIssues, ...aiReview.songIssues].filter(i => i.suggestedValue).length > 0 && (
+              {[...aiReview.showIssues, ...aiReview.songIssues].filter(i => i.suggestedValue).length > 0 && !showApprovalPanel && aiEnhancedData && (
                 <div className="rounded bg-success/10 border border-success/20 p-2 text-xs text-success flex items-center gap-2">
                   <CheckCircle className="h-3.5 w-3.5 shrink-0" />
                   {t('aiAutoFillNotice', { count: [...aiReview.showIssues, ...aiReview.songIssues].filter(i => i.suggestedValue).length })}
@@ -325,6 +354,16 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
             </div>
           )}
         </div>
+      )}
+
+      {/* AI Suggestion Approval Panel */}
+      {showApprovalPanel && aiReview && (
+        <AISuggestionApproval
+          showIssues={aiReview.showIssues}
+          songIssues={aiReview.songIssues}
+          onApprove={handleApproveCategories}
+          onCancel={handleCancelApproval}
+        />
       )}
 
       {/* Sanitization Report */}
@@ -602,7 +641,7 @@ function VenuesTable({ shows, highlightedRows = [], aiIssues }: { shows: Process
                 <td className="px-4 py-2.5 font-medium text-foreground">{show.artist}</td>
                 <td className="px-4 py-2.5 font-mono text-sm text-muted-foreground">{show.date}</td>
                 <td className="px-4 py-2.5">
-                  {show.territory && show.territory !== INFO_NAO_LOCALIZADA && (
+                  {show.territory && !isMissing(show.territory) && (
                     <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{show.territory}</span>
                   )}
                 </td>
