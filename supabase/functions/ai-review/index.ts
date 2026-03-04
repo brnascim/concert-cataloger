@@ -6,13 +6,22 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const LOCALE_INSTRUCTIONS: Record<string, string> = {
+  pt: "Responda INTEIRAMENTE em Português do Brasil.",
+  en: "Respond ENTIRELY in English.",
+  es: "Responde COMPLETAMENTE en Español.",
+  de: "Antworte VOLLSTÄNDIG auf Deutsch.",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { shows, setlists } = await req.json();
+    const { shows, setlists, locale = "pt", rawContents = {} } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    const langInstruction = LOCALE_INSTRUCTIONS[locale] || LOCALE_INSTRUCTIONS.pt;
 
     // Extract folder context from sourceFile paths
     const folderContextMap = new Map<string, Set<string>>();
@@ -20,47 +29,63 @@ serve(async (req) => {
       if (show.sourceFile) {
         const parts = show.sourceFile.replace(/\\/g, '/').split('/');
         if (parts.length > 1) {
-          const folder = parts[parts.length - 2]; // parent folder name
+          const folder = parts[parts.length - 2];
           if (!folderContextMap.has(folder)) folderContextMap.set(folder, new Set());
           folderContextMap.get(folder)!.add(show.sourceFile);
         }
       }
     }
-    const folderContext = Array.from(folderContextMap.entries()).map(([folder, files]) => 
+    const folderContext = Array.from(folderContextMap.entries()).map(([folder, files]) =>
       `Folder "${folder}" contains ${files.size} file(s): ${Array.from(files).join(', ')}`
     ).join('\n');
 
+    // Prepare raw file content excerpts (truncated to avoid token limits)
+    const rawExcerpts: string[] = [];
+    for (const [filename, content] of Object.entries(rawContents as Record<string, string>)) {
+      const truncated = (content || '').slice(0, 3000);
+      rawExcerpts.push(`--- FILE: ${filename} ---\n${truncated}${content.length > 3000 ? '\n[...truncated...]' : ''}`);
+    }
+    const rawContentSection = rawExcerpts.length > 0
+      ? `\n\nRAW FILE CONTENTS (original text from uploaded files — use this to understand context, dates, venues, artists, songs even when not explicitly labeled):\n${rawExcerpts.slice(0, 10).join('\n\n')}`
+      : '';
+
     const systemPrompt = `You are an expert music data quality auditor and metadata researcher for BMG's live performance reporting system.
 You receive processed show data (dates, venues, artists) and setlist data (songs, composers) that were extracted from various file formats (DOCX, PDF, TXT, Excel, CSV).
+You also receive the RAW TEXT CONTENT of the original files. Use this to understand context that the automated parser may have missed.
+
+${langInstruction}
 
 YOUR PRIMARY MISSION: Rapidly standardize and complete all data fields. This data comes from files in many formats and languages — your job is to make it clean, complete, and export-ready.
 
+## RAW CONTENT INTERPRETATION
+When you receive raw file content:
+1. **Identify patterns**: Look for dates (any format), venue names, city names, artist names, song titles even without explicit labels
+2. **Cross-reference**: Compare what the parser extracted vs what's in the raw text — flag anything missed
+3. **Contextual inference**: If a line says "São Paulo - 15/03/2025" that's a city and date even without labels
+4. **Song lists**: Lines that are just titles (possibly numbered) are likely setlist songs
+5. **Composers**: Look for patterns like "(John/Paul)", "by Artist", "comp:", "autor:" near song titles
+
 ## CONTEXT ANALYSIS RULES
 
-1. **Folder Logic**: The SOURCE FILE path contains the original folder structure. The FOLDER NAME almost always represents the ARTIST name. 
+1. **Folder Logic**: The SOURCE FILE path contains the original folder structure. The FOLDER NAME almost always represents the ARTIST name.
    - If a file is at "Artist Name/setlist.xlsx", the artist is "Artist Name"
-   - If a file is at "Tour 2024/Artist Name/dates.docx", use "Artist Name"
    - If the extracted artist doesn't match the folder name, the folder name is MORE RELIABLE
    - Flag mismatches and suggest the folder-based artist name
 
-2. **File Content Context**: Multiple files in the same folder belong to the SAME artist/tour:
-   - A file with only dates/venues and another with only songs should be CROSS-REFERENCED
-   - The Set List Number links shows to their setlists
-   - If one file has the artist name and another doesn't, PROPAGATE the artist name
+2. **File Content Context**: Multiple files in the same folder belong to the SAME artist/tour
 
 3. **Data Completeness**: For EVERY field marked "informação não localizada", "information not found", or left empty:
    - Use your extensive knowledge of the music industry to suggest values
    - For COMPOSERS: You know most published songwriters. Suggest with confidence level.
    - For TERRITORIES: Infer from city names, venue names, or language of the document
    - For VENUES: If you recognize the city, suggest well-known venues
-   - For DATES: Look for date patterns in surrounding context
+   - For DATES: Look for date patterns in the raw content
 
-4. **Composer Research**: This is CRITICAL. For each song:
+4. **Composer Research**: For each song:
    - Search your training data for the correct composer(s)
    - Consider the artist — many artists write their own songs
    - Check if it's a cover — attribute to original songwriter
    - Use standard music industry format: "Composer1 / Composer2"
-   - Include BMG-affiliated writers when known
 
 5. **Smart Corrections**:
    - Fix obvious typos in artist names, song titles, city names
@@ -70,10 +95,10 @@ YOUR PRIMARY MISSION: Rapidly standardize and complete all data fields. This dat
 
 ## RESPONSE REQUIREMENTS
 
-- Respond in the SAME LANGUAGE as the data (usually Portuguese or English)
+- ${langInstruction}
 - For EVERY missing or suspicious field, provide a suggestedValue
 - Include confidence: "high" (you're certain), "medium" (likely correct), "low" (best guess)
-- Include source: explain HOW you know (e.g., "Known songwriter", "Inferred from folder name", "Standard territory code")
+- Include source: explain HOW you know (e.g., "Known songwriter", "Inferred from folder name", "Found in raw file content")
 - NEVER leave a suggestion empty if you can make any reasonable inference
 - Return ONLY valid JSON matching the schema below
 
@@ -111,7 +136,6 @@ Response JSON schema:
   ]
 }`;
 
-    // Send more data for better context
     const compactShows = shows.slice(0, 80).map((s: any, i: number) => ({
       i, artist: s.artist, date: s.date, territory: s.territory,
       city: s.city, venue: s.venue, headliner: s.headlinerYN,
@@ -121,7 +145,7 @@ Response JSON schema:
     const compactSetlists = setlists.slice(0, 20).map((sl: any) => ({
       n: sl.number,
       songs: sl.songs.slice(0, 50).map((s: any, i: number) => ({
-        i, title: s.songTitle, composers: s.composers, 
+        i, title: s.songTitle, composers: s.composers,
         bmg: s.bmgControl, comments: s.comments,
       })),
     }));
@@ -136,14 +160,16 @@ ${JSON.stringify(compactShows)}
 
 SETLISTS (${setlists.length} total, showing first ${compactSetlists.length}):
 ${JSON.stringify(compactSetlists)}
+${rawContentSection}
 
 INSTRUCTIONS:
-1. For EVERY field that is empty, "informação não localizada", or "information not found" — provide a suggestedValue based on context and your knowledge
+1. For EVERY field that is empty, "informação não localizada", or "information not found" — provide a suggestedValue based on context, raw file content, and your knowledge
 2. For EVERY song without composers — research and suggest the correct composer(s)
 3. Verify artist names match folder names — suggest corrections if they don't
-4. Infer territories from cities/venues
-5. Check for duplicates
-6. Provide an overall quality score
+4. Cross-reference raw file content with parsed data to find anything the parser missed
+5. Infer territories from cities/venues
+6. Check for duplicates
+7. Provide an overall quality score
 
 Return comprehensive JSON review with ALL suggestions.`;
 
@@ -165,21 +191,18 @@ Return comprehensive JSON review with ALL suggestions.`;
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
         return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const t = await response.text();
       console.error("AI gateway error:", response.status, t);
       return new Response(JSON.stringify({ error: "AI review failed" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 

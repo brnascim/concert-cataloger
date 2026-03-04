@@ -109,7 +109,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
   const handleAIReview = async () => {
     setAiLoading(true);
     try {
-      const result = await requestAIReview(sanitized);
+      const result = await requestAIReview(sanitized, locale);
       setAiReview(result);
       setShowAiPanel(true);
       

@@ -47,7 +47,7 @@ export interface WorksListResult {
   summary: string;
 }
 
-export async function requestAIReview(data: ProcessedData): Promise<AIReviewResult> {
+export async function requestAIReview(data: ProcessedData, locale: string = 'pt'): Promise<AIReviewResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60000);
 
@@ -56,6 +56,8 @@ export async function requestAIReview(data: ProcessedData): Promise<AIReviewResu
       body: {
         shows: data.shows,
         setlists: data.setlists,
+        locale,
+        rawContents: data.rawContents || {},
       },
     });
 
