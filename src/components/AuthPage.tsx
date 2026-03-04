@@ -91,7 +91,7 @@ export function AuthPage() {
           <img
             src={bmgLogo}
             alt="BMG Logo"
-            className="mx-auto h-28 w-28 object-contain drop-shadow-[0_0_30px_rgba(100,200,220,0.4)]"
+            className="mx-auto h-36 w-36 object-contain drop-shadow-[0_0_30px_rgba(100,200,220,0.4)]"
           />
         </div>
 
