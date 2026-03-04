@@ -64,22 +64,19 @@ Response JSON schema:
   ]
 }`;
 
-    const userPrompt = `Analyze the following live performance data:
-
-SHOWS (${shows.length} entries):
-${JSON.stringify(shows.slice(0, 200), null, 2)}
-
-SETLISTS (${setlists.length} lists):
-${JSON.stringify(
-      setlists.map((sl: any) => ({
-        number: sl.number,
-        songs: sl.songs.slice(0, 100),
+    // Compact payload to avoid timeouts
+    const compactShows = shows.slice(0, 50).map((s: any, i: number) => ({
+      i, artist: s.artist, date: s.date, territory: s.territory,
+      city: s.city, venue: s.venue, headliner: s.headlinerYN,
+    }));
+    const compactSetlists = setlists.slice(0, 10).map((sl: any) => ({
+      n: sl.number,
+      songs: sl.songs.slice(0, 30).map((s: any, i: number) => ({
+        i, title: s.songTitle, composers: s.composers, bmg: s.bmgControl,
       })),
-      null,
-      2
-    )}
+    }));
 
-Provide your quality review as JSON.`;
+    const userPrompt = `Analyze this live performance data:\n\nSHOWS (${shows.length} total, first ${compactShows.length}):\n${JSON.stringify(compactShows)}\n\nSETLISTS (${setlists.length} total, first ${compactSetlists.length}):\n${JSON.stringify(compactSetlists)}\n\nReturn JSON review.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -88,7 +85,7 @@ Provide your quality review as JSON.`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5-mini",
+        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
