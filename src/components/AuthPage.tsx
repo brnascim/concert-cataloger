@@ -87,18 +87,12 @@ export function AuthPage() {
 
       <div className="w-full max-w-[460px] space-y-5 relative z-10">
         {/* Logo & Title */}
-        <div className="text-center space-y-3">
+        <div className="text-center">
           <img
             src={bmgLogo}
             alt="BMG Logo"
-            className="mx-auto h-24 w-24 rounded-2xl object-cover drop-shadow-[0_0_30px_rgba(100,200,220,0.4)]"
+            className="mx-auto h-28 w-28 object-contain drop-shadow-[0_0_30px_rgba(100,200,220,0.4)]"
           />
-          <h1
-            className="text-3xl font-bold tracking-wider"
-            style={{ color: '#7ec8d8', textShadow: '0 0 40px rgba(100,200,220,0.5)' }}
-          >
-            BMG
-          </h1>
         </div>
 
         {/* Glass Card */}
