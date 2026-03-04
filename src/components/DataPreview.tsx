@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Wrench, ShieldCheck, RotateCcw, Save, FileText, Filter, Bot, Sparkles, Loader2, ExternalLink } from 'lucide-react';
+import { Download, Calendar, Music, AlertTriangle, CheckCircle, XCircle, Ban, ChevronDown, ChevronUp, Wrench, ShieldCheck, RotateCcw, Save, FileText, Filter, Bot, Sparkles, Loader2, ExternalLink, ListMusic } from 'lucide-react';
 import type { ProcessedData, ShowEntry } from '@/lib/types';
 import { exportToExcel } from '@/lib/exporter';
 import { exportToCsv } from '@/lib/csvExporter';
@@ -7,7 +7,8 @@ import { sanitizeData, type SanitizationReport } from '@/lib/sanitizer';
 import { runQAAudit, type AuditReport } from '@/lib/qaAuditor';
 import { useI18n } from '@/lib/i18n';
 import { INFO_NAO_LOCALIZADA } from '@/lib/infoNaoLocalizada';
-import { requestAIReview, type AIReviewResult, type AIShowIssue, type AISongIssue } from '@/lib/aiReview';
+import { requestAIReview, applyAISuggestions, requestWorksList, type AIReviewResult, type AIShowIssue, type AISongIssue, type WorksListResult } from '@/lib/aiReview';
+import { exportWorksList } from '@/lib/worksListExporter';
 import { toast } from 'sonner';
 
 type QualityFilter = 'all' | 'invalid' | 'suspect' | 'valid';
@@ -37,13 +38,18 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
   const [aiReview, setAiReview] = useState<AIReviewResult | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
+  const [aiEnhancedData, setAiEnhancedData] = useState<ProcessedData | null>(null);
+  const [worksLoading, setWorksLoading] = useState(false);
   const { t, locale } = useI18n();
 
   const { data: sanitizedRaw, report } = useMemo(() => sanitizeData(data), [data]);
   const { data: sanitized, audit } = useMemo(() => runQAAudit(sanitizedRaw), [sanitizedRaw]);
+  
+  // Use AI-enhanced data if available, otherwise use sanitized data
+  const displayData = aiEnhancedData || sanitized;
   const isBlockedByDataGuard = audit.dataGuard.blocked;
 
-  const totalSongs = sanitized.setlists.reduce((sum, sl) => sum + sl.songs.length, 0);
+  const totalSongs = displayData.setlists.reduce((sum, sl) => sum + sl.songs.length, 0);
   const totalCorrections = report.correction1_dateInArtist + report.correction1_tourInArtist +
     report.correction2_venueInDate + report.correction3_metadataPropagated +
     report.correction4_duplicatesRemoved + report.correction5_bmgNormalized +
@@ -52,9 +58,9 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
 
   const showClassifications = useMemo(() => {
     const map = new Map<number, 'invalid' | 'suspect' | 'valid'>();
-    sanitized.shows.forEach((s, i) => map.set(i, classifyShow(s)));
+    displayData.shows.forEach((s, i) => map.set(i, classifyShow(s)));
     return map;
-  }, [sanitized.shows]);
+  }, [displayData.shows]);
 
   const counts = useMemo(() => {
     let invalid = 0, suspect = 0, valid = 0;
@@ -63,9 +69,9 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
   }, [showClassifications]);
 
   const filteredShows = useMemo(() => {
-    if (qualityFilter === 'all') return sanitized.shows;
-    return sanitized.shows.filter((_, i) => showClassifications.get(i) === qualityFilter);
-  }, [sanitized.shows, qualityFilter, showClassifications]);
+    if (qualityFilter === 'all') return displayData.shows;
+    return displayData.shows.filter((_, i) => showClassifications.get(i) === qualityFilter);
+  }, [displayData.shows, qualityFilter, showClassifications]);
 
   // Index AI issues by row for inline display
   const showIssuesByRow = useMemo(() => {
@@ -97,7 +103,13 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
       const result = await requestAIReview(sanitized);
       setAiReview(result);
       setShowAiPanel(true);
-      toast.success(`AI Review: Score ${result.qualityScore}/100`);
+      
+      // Auto-fill suggested values
+      const enhanced = applyAISuggestions(sanitized, result);
+      setAiEnhancedData(enhanced);
+      
+      const suggestionsApplied = [...result.showIssues, ...result.songIssues].filter(i => i.suggestedValue).length;
+      toast.success(`AI Review: Score ${result.qualityScore}/100${suggestionsApplied > 0 ? ` — ${suggestionsApplied} ${t('aiSuggestionsApplied')}` : ''}`);
     } catch (err: any) {
       toast.error(t('aiError'), { description: err.message });
     } finally {
@@ -105,9 +117,30 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
     }
   };
 
+  const handleExportWithAI = () => {
+    exportToExcel(displayData, locale, aiReview);
+  };
+
+  const handleWorksList = async () => {
+    setWorksLoading(true);
+    try {
+      const result = await requestWorksList(displayData);
+      if (result.works && result.works.length > 0) {
+        await exportWorksList(result.works);
+        toast.success(t('worksListSuccess', { count: result.works.length }));
+      } else {
+        toast.warning(t('worksListEmpty'));
+      }
+    } catch (err: any) {
+      toast.error(t('worksListError'), { description: err.message });
+    } finally {
+      setWorksLoading(false);
+    }
+  };
+
   const tabs = [
     { id: 'venues', label: t('datesAndVenues'), icon: Calendar },
-    ...sanitized.setlists.map(sl => ({
+    ...displayData.setlists.map(sl => ({
       id: `setlist-${sl.number}`,
       label: t('setListN', { n: sl.number }),
       icon: Music,
@@ -127,19 +160,29 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
               </button>
             )}
             {onSaveDraft && (
-              <button onClick={() => onSaveDraft(sanitized)} className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border">
+              <button onClick={() => onSaveDraft(displayData)} className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border">
                 <Save className="h-3.5 w-3.5" />
                 {t('saveDraft')}
               </button>
             )}
-            <button onClick={() => exportToExcel(sanitized, locale)} disabled={isBlockedByDataGuard} className="flex items-center gap-1.5 rounded-md gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all glow-amber-sm disabled:opacity-50 disabled:cursor-not-allowed">
-              <Download className="h-3.5 w-3.5" />
-              📊 {t('exportExcel')}
-            </button>
-            <button onClick={() => exportToCsv(sanitized, locale)} disabled={isBlockedByDataGuard} className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border">
+            
+            {/* Export buttons */}
+            {aiReview ? (
+              <button onClick={handleExportWithAI} disabled={isBlockedByDataGuard} className="flex items-center gap-1.5 rounded-md gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all glow-amber-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                <Download className="h-3.5 w-3.5" />
+                📊 {t('exportExcelAI')}
+              </button>
+            ) : (
+              <button onClick={() => exportToExcel(displayData, locale)} disabled={isBlockedByDataGuard} className="flex items-center gap-1.5 rounded-md gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all glow-amber-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                <Download className="h-3.5 w-3.5" />
+                📊 {t('exportExcel')}
+              </button>
+            )}
+            <button onClick={() => exportToCsv(displayData, locale)} disabled={isBlockedByDataGuard} className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border">
               <Download className="h-3.5 w-3.5" />
               {t('exportCsv')}
             </button>
+            
             {/* AI Review Button */}
             <button
               onClick={handleAIReview}
@@ -148,6 +191,16 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
             >
               {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
               {aiLoading ? t('aiReviewing') : t('aiReviewBtn')}
+            </button>
+
+            {/* Works List Button */}
+            <button
+              onClick={handleWorksList}
+              disabled={worksLoading}
+              className="flex items-center gap-1.5 rounded-md bg-primary/10 border border-primary/30 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {worksLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ListMusic className="h-3.5 w-3.5" />}
+              {worksLoading ? t('worksListGenerating') : t('worksListBtn')}
             </button>
           </div>
 
@@ -183,8 +236,8 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
           <StatWithIcon label={t('totalFailure')} value={data.filesWithFailures} icon={<XCircle className="h-3.5 w-3.5 text-destructive" />} />
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 mt-3 pt-3 border-t border-border">
-          <Stat label={t('showsExtracted')} value={sanitized.shows.length} />
-          <Stat label={t('setlistsCreated')} value={sanitized.setlists.length} />
+          <Stat label={t('showsExtracted')} value={displayData.shows.length} />
+          <Stat label={t('setlistsCreated')} value={displayData.setlists.length} />
           <Stat label={t('totalSongs')} value={totalSongs} />
           <StatWithIcon label={t('rejectedLines')} value={data.rejectedLines} icon={<Ban className="h-3.5 w-3.5 text-muted-foreground" />} />
         </div>
@@ -201,7 +254,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
         )}
       </div>
 
-      {/* AI Review Panel */}
+      {/* AI Review Panel — always visible after review */}
       {aiReview && (
         <div className="rounded-lg bg-card border border-accent/30 p-5">
           <button onClick={() => setShowAiPanel(!showAiPanel)} className="w-full flex items-center justify-between text-sm font-semibold text-accent uppercase tracking-wider">
@@ -229,6 +282,14 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
               </div>
 
               <p className="text-sm text-muted-foreground">{aiReview.summary}</p>
+
+              {/* Auto-fill notice */}
+              {[...aiReview.showIssues, ...aiReview.songIssues].filter(i => i.suggestedValue).length > 0 && (
+                <div className="rounded bg-success/10 border border-success/20 p-2 text-xs text-success flex items-center gap-2">
+                  <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+                  {t('aiAutoFillNotice', { count: [...aiReview.showIssues, ...aiReview.songIssues].filter(i => i.suggestedValue).length })}
+                </div>
+              )}
 
               {/* Duplicates */}
               {aiReview.duplicates.length > 0 && (
@@ -370,7 +431,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
       {/* Table Content */}
       <div className="rounded-lg border border-border overflow-hidden">
         {activeTab === 'venues' && <VenuesTable shows={filteredShows} highlightedRows={audit.dataGuard.highlightedShowRows} aiIssues={showIssuesByRow} />}
-        {sanitized.setlists.map(sl =>
+        {displayData.setlists.map(sl =>
           activeTab === `setlist-${sl.number}` ? (
             <SetlistTable key={sl.number} setlistNumber={sl.number} songs={sl.songs} aiIssues={songIssuesByKey} />
           ) : null
@@ -406,7 +467,7 @@ function AIIssueIndicator({ issues }: { issues: (AIShowIssue | AISongIssue)[] })
             <div className="min-w-0">
               <span>{issue.message}</span>
               {issue.suggestedValue && (
-                <span className="block font-medium mt-0.5">→ {issue.suggestedValue}</span>
+                <span className="block font-medium mt-0.5">→ {issue.suggestedValue} ✅</span>
               )}
               {'confidence' in issue && issue.confidence && (
                 <span className={`inline-block mt-0.5 mr-1 rounded px-1 py-0.5 text-[10px] font-medium ${
