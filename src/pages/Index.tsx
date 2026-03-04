@@ -23,9 +23,9 @@ const Index = () => {
   const handleSaveDraft = (sanitizedData: ProcessedData) => {
     try {
       localStorage.setItem('setlist_draft', JSON.stringify(sanitizedData));
-      alert('Rascunho salvo com sucesso!');
+      alert(t('draftSaved'));
     } catch {
-      alert('Erro ao salvar rascunho.');
+      alert(t('draftSaveError'));
     }
   };
 

@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Download, FileText, CheckCircle, BookOpen, Code, FolderTree, AlertTriangle, Wrench } from 'lucide-react';
 import { generateDocumentation, downloadDocumentation } from '@/lib/docGenerator';
 import { Button } from '@/components/ui/button';
+import { useI18n } from '@/lib/i18n';
 
 export default function DocumentationPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [generated, setGenerated] = useState(false);
+  const { t } = useI18n();
 
   const handleGenerate = () => {
     const content = generateDocumentation();
@@ -18,32 +20,27 @@ export default function DocumentationPage() {
   };
 
   const sections = [
-    { icon: FolderTree, label: 'Mapeamento Arquitetural', desc: 'Diagrama, fluxos, dependências e pontos críticos' },
-    { icon: FolderTree, label: 'Estrutura por Pastas', desc: 'Hierarquia completa com propósito e relações' },
-    { icon: Code, label: 'Descrição Técnica por Arquivo', desc: 'Fluxo lógico, hooks, props, regras de negócio' },
-    { icon: BookOpen, label: 'Segmentação por Tipo', desc: 'Responsabilidades, dependências, complexidade' },
-    { icon: AlertTriangle, label: 'Análise Crítica', desc: 'Code smells, acoplamento, violações de SRP' },
-    { icon: Wrench, label: 'Sugestões de Refatoração', desc: 'Melhorias estruturais, performance, testes' },
+    { icon: FolderTree, label: t('docArchMap'), desc: t('docArchMapDesc') },
+    { icon: FolderTree, label: t('docFolderStruct'), desc: t('docFolderStructDesc') },
+    { icon: Code, label: t('docTechDesc'), desc: t('docTechDescDesc') },
+    { icon: BookOpen, label: t('docSegmentation'), desc: t('docSegmentationDesc') },
+    { icon: AlertTriangle, label: t('docCritical'), desc: t('docCriticalDesc') },
+    { icon: Wrench, label: t('docRefactor'), desc: t('docRefactorDesc') },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="text-center space-y-3">
         <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
           <FileText className="h-4 w-4" />
-          Documentação Técnica
+          {t('docTitle')}
         </div>
-        <h2 className="text-2xl font-bold text-foreground">
-          Gerador de Documentação Completa
-        </h2>
+        <h2 className="text-2xl font-bold text-foreground">{t('docHeading')}</h2>
         <p className="text-muted-foreground max-w-lg mx-auto">
-          Gera automaticamente um arquivo <code className="text-primary font-mono text-sm">.txt</code> com a 
-          descrição técnica aprofundada de todo o código da aplicação.
+          {t('docDesc')}
         </p>
       </div>
 
-      {/* Sections Preview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {sections.map((s, i) => (
           <div key={i} className="rounded-lg bg-card border border-border p-4 flex items-start gap-3">
@@ -58,42 +55,29 @@ export default function DocumentationPage() {
         ))}
       </div>
 
-      {/* Actions */}
       <div className="flex items-center justify-center gap-3">
-        <Button
-          onClick={handleGenerate}
-          variant="outline"
-          className="gap-2"
-        >
+        <Button onClick={handleGenerate} variant="outline" className="gap-2">
           <FileText className="h-4 w-4" />
-          {generated ? 'Regerar Preview' : 'Gerar Preview'}
+          {generated ? t('docRegenPreview') : t('docGenPreview')}
         </Button>
-        <Button
-          onClick={handleDownload}
-          className="gap-2 gradient-primary text-primary-foreground hover:opacity-90 glow-amber-sm"
-        >
+        <Button onClick={handleDownload} className="gap-2 gradient-primary text-primary-foreground hover:opacity-90 glow-amber-sm">
           <Download className="h-4 w-4" />
-          📥 Baixar documentacao_tecnica_completa.txt
+          {t('docDownload')}
         </Button>
       </div>
 
       {generated && (
         <div className="flex items-center justify-center gap-2 text-sm text-success">
           <CheckCircle className="h-4 w-4" />
-          Documentação gerada com sucesso!
+          {t('docGenSuccess')}
         </div>
       )}
 
-      {/* Preview */}
       {preview && (
         <div className="rounded-lg border border-border bg-card overflow-hidden">
           <div className="bg-secondary px-4 py-2 border-b border-border flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">
-              📄 documentacao_tecnica_completa.txt
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {(new Blob([preview]).size / 1024).toFixed(1)} KB
-            </span>
+            <span className="text-sm font-medium text-foreground">📄 documentacao_tecnica_completa.txt</span>
+            <span className="text-xs text-muted-foreground">{(new Blob([preview]).size / 1024).toFixed(1)} KB</span>
           </div>
           <pre className="p-4 text-xs text-muted-foreground font-mono overflow-auto max-h-[600px] whitespace-pre-wrap leading-relaxed">
             {preview}

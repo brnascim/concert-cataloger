@@ -1,6 +1,7 @@
 import { useCallback, useState, useRef } from 'react';
 import { Upload, FileText, X, FolderOpen } from 'lucide-react';
 import type { UploadedFile } from '@/lib/types';
+import { useI18n } from '@/lib/i18n';
 
 interface FileUploadZoneProps {
   onFilesLoaded: (files: UploadedFile[]) => void;
@@ -11,6 +12,7 @@ export function FileUploadZone({ onFilesLoaded }: FileUploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const { t } = useI18n();
 
   const ACCEPTED_EXTENSIONS = ['.txt', '.csv', '.rtf', '.docx', '.pdf', '.xlsx', '.xlsm'];
 
@@ -26,7 +28,6 @@ export function FileUploadZone({ onFilesLoaded }: FileUploadZoneProps) {
     setIsDragging(false);
     const items = e.dataTransfer.items;
     if (items && items.length > 0) {
-      // Try to read directories via webkitGetAsEntry
       const entries: FileSystemEntry[] = [];
       for (let i = 0; i < items.length; i++) {
         const entry = items[i].webkitGetAsEntry?.();
@@ -102,7 +103,6 @@ export function FileUploadZone({ onFilesLoaded }: FileUploadZoneProps) {
           className="hidden"
           onChange={handleFileInput}
         />
-        {/* Hidden folder input */}
         <input
           ref={folderInputRef}
           type="file"
@@ -114,22 +114,17 @@ export function FileUploadZone({ onFilesLoaded }: FileUploadZoneProps) {
           onChange={handleFileInput}
         />
         <Upload className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-        <p className="text-lg font-medium text-foreground">
-          Arraste arquivos ou pastas aqui, ou clique para selecionar
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          TXT, CSV, RTF, DOCX, PDF, XLSX, XLSM
-        </p>
+        <p className="text-lg font-medium text-foreground">{t('dragDrop')}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{t('dragDropFormats')}</p>
       </div>
 
-      {/* Folder upload button */}
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
         className="w-full flex items-center justify-center gap-2 rounded-md bg-secondary px-4 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border"
       >
         <FolderOpen className="h-4 w-4" />
-        📂 Selecionar Pasta Inteira
+        {t('selectFolder')}
       </button>
 
       {files.length > 0 && (
@@ -159,7 +154,7 @@ export function FileUploadZone({ onFilesLoaded }: FileUploadZoneProps) {
             disabled={isProcessing}
             className="w-full rounded-md gradient-primary py-3 px-4 font-semibold text-primary-foreground transition-all hover:opacity-90 glow-amber disabled:opacity-50"
           >
-            {isProcessing ? 'Processando...' : `Processar ${files.length} arquivo${files.length > 1 ? 's' : ''}`}
+            {isProcessing ? t('processing') : t('processFiles', { count: files.length, plural: files.length > 1 ? 's' : '' })}
           </button>
         </div>
       )}
@@ -167,7 +162,6 @@ export function FileUploadZone({ onFilesLoaded }: FileUploadZoneProps) {
   );
 }
 
-/** Recursively read all files from directory entries */
 async function readEntriesRecursively(entries: FileSystemEntry[]): Promise<File[]> {
   const files: File[] = [];
 
@@ -177,7 +171,6 @@ async function readEntriesRecursively(entries: FileSystemEntry[]): Promise<File[
       const file = await new Promise<File>((resolve, reject) => {
         fileEntry.file(resolve, reject);
       });
-      // Attach relative path
       Object.defineProperty(file, 'webkitRelativePath', {
         value: path + file.name,
         writable: false,
