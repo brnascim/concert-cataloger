@@ -5,16 +5,46 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { AuthPage } from "@/components/AuthPage";
+import { Skeleton } from "@/components/ui/skeleton";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const LoadingSkeleton = () => (
+  <div className="min-h-screen bg-background animate-fade-in">
+    {/* Header skeleton */}
+    <div className="border-b border-border px-6 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-10 w-10 rounded-xl" />
+        <div className="space-y-1.5">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-3 w-44" />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-9 w-24 rounded-md" />
+        <Skeleton className="h-9 w-24 rounded-md" />
+        <Skeleton className="h-9 w-20 rounded-md" />
+      </div>
+    </div>
+    {/* Content skeleton */}
+    <div className="mx-auto max-w-2xl px-6 py-12 space-y-6">
+      <div className="text-center space-y-3">
+        <Skeleton className="h-7 w-72 mx-auto" />
+        <Skeleton className="h-4 w-96 mx-auto" />
+      </div>
+      <Skeleton className="h-48 w-full rounded-xl" />
+      <Skeleton className="h-12 w-full rounded-lg" />
+    </div>
+  </div>
+);
+
 const AppContent = () => {
   const { session, loading } = useAuth();
 
   if (loading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">Loading...</div>;
+    return <LoadingSkeleton />;
   }
 
   if (!session) {
