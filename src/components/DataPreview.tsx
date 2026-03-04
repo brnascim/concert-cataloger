@@ -7,7 +7,7 @@ import { sanitizeData, type SanitizationReport } from '@/lib/sanitizer';
 import { runQAAudit, type AuditReport } from '@/lib/qaAuditor';
 import { useI18n } from '@/lib/i18n';
 import { INFO_NAO_LOCALIZADA } from '@/lib/infoNaoLocalizada';
-import { requestAIReview, applyAISuggestions, requestWorksList, type AIReviewResult, type AIShowIssue, type AISongIssue, type WorksListResult } from '@/lib/aiReview';
+import { requestAIReview, applyAISuggestions, generateWorksList, type AIReviewResult, type AIShowIssue, type AISongIssue, type WorksListResult } from '@/lib/aiReview';
 import { exportWorksList } from '@/lib/worksListExporter';
 import { toast } from 'sonner';
 
@@ -124,7 +124,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
   const handleWorksList = async () => {
     setWorksLoading(true);
     try {
-      const result = await requestWorksList(displayData);
+      const result = generateWorksList(displayData);
       if (result.works && result.works.length > 0) {
         await exportWorksList(result.works);
         toast.success(t('worksListSuccess', { count: result.works.length }));

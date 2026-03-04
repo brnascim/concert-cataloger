@@ -111,23 +111,54 @@ export function applyAISuggestions(data: ProcessedData, review: AIReviewResult):
   return { ...data, shows, setlists };
 }
 
-export async function requestWorksList(data: ProcessedData): Promise<WorksListResult> {
-  const timeout = setTimeout(() => {}, 60000);
-
-  try {
-    const { data: result, error } = await supabase.functions.invoke("generate-works-list", {
-      body: {
-        shows: data.shows,
-        setlists: data.setlists,
-      },
-    });
-
-    if (error) throw new Error(error.message || "Works list request failed");
-    if (result?.error) throw new Error(result.error);
-    return result as WorksListResult;
-  } catch (err: any) {
-    throw err;
-  } finally {
-    clearTimeout(timeout);
+/**
+ * Generate a consolidated works list locally from processed data.
+ * Deduplicates songs across all setlists and maps artist from show context.
+ */
+export function generateWorksList(data: ProcessedData): WorksListResult {
+  // Build a map of setlist number → artist (from shows)
+  const setlistArtistMap = new Map<number, string>();
+  for (const show of data.shows) {
+    if (show.artist && show.setListNumber) {
+      setlistArtistMap.set(show.setListNumber, show.artist);
+    }
   }
+
+  // Deduplicate songs by normalized title + artist
+  const seen = new Map<string, WorksListEntry>();
+
+  for (const sl of data.setlists) {
+    const artist = setlistArtistMap.get(sl.number) || '';
+
+    for (const song of sl.songs) {
+      const normalizedTitle = song.songTitle.trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizedArtist = artist.trim().toLowerCase();
+      const key = `${normalizedTitle}||${normalizedArtist}`;
+
+      if (!seen.has(key)) {
+        seen.set(key, {
+          songTitle: song.songTitle.trim(),
+          composers: song.composers || '',
+          artist: artist,
+          confidence: song.composers ? 'high' : 'low',
+          source: song.composers ? 'Extracted from source file' : 'Composer not found in source',
+        });
+      } else {
+        // Merge: prefer entry with composers if current one is empty
+        const existing = seen.get(key)!;
+        if (!existing.composers && song.composers) {
+          existing.composers = song.composers;
+          existing.confidence = 'high';
+          existing.source = 'Extracted from source file';
+        }
+      }
+    }
+  }
+
+  const works = [...seen.values()].sort((a, b) => a.songTitle.localeCompare(b.songTitle));
+
+  return {
+    works,
+    summary: `${works.length} unique works consolidated from ${data.setlists.length} setlist(s).`,
+  };
 }
