@@ -1,8 +1,11 @@
 import type { ProcessedData } from './types';
 import { fillMissing, normalizeComposers } from './infoNaoLocalizada';
+import type { Locale } from './i18n';
 
-export function exportToCsv(data: ProcessedData): void {
+export function exportToCsv(data: ProcessedData, locale: Locale = 'pt'): void {
   const rows: string[][] = [];
+  const fm = (v: string | null | undefined) => fillMissing(v, locale);
+  const nc = (v: string) => normalizeComposers(v, locale);
   
   // Header
   rows.push([
@@ -18,14 +21,14 @@ export function exportToCsv(data: ProcessedData): void {
         const song = setlist.songs[i];
         const title = song.songTitle?.trim()
           ? song.songTitle
-          : `[título não localizado — faixa ${i + 1}]`;
+          : `[${locale === 'en' ? 'title not found' : locale === 'es' ? 'título no localizado' : locale === 'de' ? 'Titel nicht gefunden' : 'título não localizado'} — ${locale === 'en' ? 'track' : locale === 'es' ? 'pista' : locale === 'de' ? 'Track' : 'faixa'} ${i + 1}]`;
         rows.push([
-          fillMissing(show.artist), fillMissing(show.date), fillMissing(show.territory),
-          fillMissing(show.city), fillMissing(show.venue),
+          fm(show.artist), fm(show.date), fm(show.territory),
+          fm(show.city), fm(show.venue),
           String(show.setListNumber), String(i + 1),
-          title, normalizeComposers(song.composers), fillMissing(song.bmgControl),
-          fillMissing(song.iMaestroSongCode), fillMissing(song.prsTunecode),
-          fillMissing(show.comments), fillMissing(song.comments), fillMissing(show.sourceFile),
+          title, nc(song.composers), fm(song.bmgControl),
+          fm(song.iMaestroSongCode), fm(song.prsTunecode),
+          fm(show.comments), fm(song.comments), fm(show.sourceFile),
         ]);
       }
     }

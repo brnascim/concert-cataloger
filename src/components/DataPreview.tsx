@@ -37,7 +37,7 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
   const [aiReview, setAiReview] = useState<AIReviewResult | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const { data: sanitizedRaw, report } = useMemo(() => sanitizeData(data), [data]);
   const { data: sanitized, audit } = useMemo(() => runQAAudit(sanitizedRaw), [sanitizedRaw]);
@@ -132,11 +132,11 @@ export function DataPreview({ data, onReset, onSaveDraft }: DataPreviewProps) {
                 {t('saveDraft')}
               </button>
             )}
-            <button onClick={() => exportToExcel(sanitized)} disabled={isBlockedByDataGuard} className="flex items-center gap-1.5 rounded-md gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all glow-amber-sm disabled:opacity-50 disabled:cursor-not-allowed">
+            <button onClick={() => exportToExcel(sanitized, locale)} disabled={isBlockedByDataGuard} className="flex items-center gap-1.5 rounded-md gradient-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-all glow-amber-sm disabled:opacity-50 disabled:cursor-not-allowed">
               <Download className="h-3.5 w-3.5" />
               📊 {t('exportExcel')}
             </button>
-            <button onClick={() => exportToCsv(sanitized)} disabled={isBlockedByDataGuard} className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border">
+            <button onClick={() => exportToCsv(sanitized, locale)} disabled={isBlockedByDataGuard} className="flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors border border-border">
               <Download className="h-3.5 w-3.5" />
               {t('exportCsv')}
             </button>

@@ -1,23 +1,26 @@
 import ExcelJS from 'exceljs';
 import type { ProcessedData } from './types';
 import { fillMissing, normalizeComposers } from './infoNaoLocalizada';
+import type { Locale } from './i18n';
 
+/** Dark teal/blue header — matching BMG corporate report style */
 const HEADER_FILL: ExcelJS.Fill = {
   type: 'pattern',
   pattern: 'solid',
-  fgColor: { argb: 'FFD9D9D9' },
+  fgColor: { argb: 'FF1F4E5F' },
 };
 
 const ALT_ROW_FILL: ExcelJS.Fill = {
   type: 'pattern',
   pattern: 'solid',
-  fgColor: { argb: 'FFF5F5F5' },
+  fgColor: { argb: 'FFF2F7F9' },
 };
 
 const HEADER_FONT: Partial<ExcelJS.Font> = {
   name: 'Arial',
   size: 10,
   bold: true,
+  color: { argb: 'FFFFFFFF' },
 };
 
 const BODY_FONT: Partial<ExcelJS.Font> = {
@@ -25,31 +28,54 @@ const BODY_FONT: Partial<ExcelJS.Font> = {
   size: 10,
 };
 
+const HEADER_BORDER: Partial<ExcelJS.Borders> = {
+  bottom: { style: 'thin', color: { argb: 'FF0D3340' } },
+  right: { style: 'thin', color: { argb: 'FF2A6B7C' } },
+};
+
 function styleHeaders(sheet: ExcelJS.Worksheet) {
   const row = sheet.getRow(1);
   row.font = HEADER_FONT;
+  row.height = 28;
   row.eachCell(cell => {
     cell.fill = HEADER_FILL;
-    cell.border = {
-      bottom: { style: 'thin', color: { argb: 'FFB0B0B0' } },
-    };
+    cell.border = HEADER_BORDER;
+    cell.alignment = { vertical: 'middle', wrapText: true };
   });
+  // Auto-filter on header row
+  const lastCol = sheet.columnCount;
+  if (lastCol > 0) {
+    sheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: lastCol },
+    };
+  }
 }
 
 function styleBody(sheet: ExcelJS.Worksheet, startRow: number) {
   for (let r = startRow; r <= sheet.rowCount; r++) {
     const row = sheet.getRow(r);
     row.font = BODY_FONT;
+    row.alignment = { vertical: 'middle', wrapText: true };
     if ((r - startRow) % 2 === 1) {
       row.eachCell(cell => {
         cell.fill = ALT_ROW_FILL;
       });
     }
+    // Light grid borders
+    row.eachCell(cell => {
+      cell.border = {
+        bottom: { style: 'hair', color: { argb: 'FFD0D0D0' } },
+        right: { style: 'hair', color: { argb: 'FFE0E0E0' } },
+      };
+    });
   }
 }
 
-export async function exportToExcel(data: ProcessedData): Promise<void> {
+export async function exportToExcel(data: ProcessedData, locale: Locale = 'pt'): Promise<void> {
   const workbook = new ExcelJS.Workbook();
+  const fm = (v: string | null | undefined) => fillMissing(v, locale);
+  const nc = (v: string) => normalizeComposers(v, locale);
 
   // Dates & Venues sheet
   const dvSheet = workbook.addWorksheet('Dates & Venues');
@@ -63,17 +89,19 @@ export async function exportToExcel(data: ProcessedData): Promise<void> {
 
   for (const s of data.shows) {
     dvSheet.addRow([
-      fillMissing(s.artist), fillMissing(s.date), fillMissing(s.territory),
-      fillMissing(s.city), fillMissing(s.venue), fillMissing(s.venueAddress),
-      fillMissing(s.prsVenueId), fillMissing(s.localPromoterContactInfo),
-      fillMissing(s.comments), s.setListNumber,
-      fillMissing(s.headlinerYN), fillMissing(s.headlinerIfN),
-      fillMissing(s.sourceFile),
+      fm(s.artist), fm(s.date), fm(s.territory),
+      fm(s.city), fm(s.venue), fm(s.venueAddress),
+      fm(s.prsVenueId), fm(s.localPromoterContactInfo),
+      fm(s.comments), s.setListNumber,
+      fm(s.headlinerYN), fm(s.headlinerIfN),
+      fm(s.sourceFile),
     ]);
   }
 
   styleBody(dvSheet, 2);
-  dvHeaders.forEach((_, i) => { dvSheet.getColumn(i + 1).width = 20; });
+  // Column widths matching reference layout
+  const dvWidths = [16, 12, 10, 16, 22, 28, 14, 26, 28, 14, 12, 16, 18];
+  dvWidths.forEach((w, i) => { dvSheet.getColumn(i + 1).width = w; });
 
   // Setlist sheets
   const slHeaders = [
@@ -90,16 +118,17 @@ export async function exportToExcel(data: ProcessedData): Promise<void> {
       const s = sl.songs[i];
       const title = s.songTitle?.trim()
         ? s.songTitle
-        : `[título não localizado — faixa ${i + 1}]`;
+        : `[${locale === 'en' ? 'title not found' : locale === 'es' ? 'título no localizado' : locale === 'de' ? 'Titel nicht gefunden' : 'título não localizado'} — ${locale === 'en' ? 'track' : locale === 'es' ? 'pista' : locale === 'de' ? 'Track' : 'faixa'} ${i + 1}]`;
       slSheet.addRow([
-        title, normalizeComposers(s.composers), fillMissing(s.bmgControl),
-        fillMissing(s.iMaestroSongCode), fillMissing(s.prsTunecode),
-        fillMissing(s.comments),
+        title, nc(s.composers), fm(s.bmgControl),
+        fm(s.iMaestroSongCode), fm(s.prsTunecode),
+        fm(s.comments),
       ]);
     }
 
     styleBody(slSheet, 2);
-    slHeaders.forEach((_, i) => { slSheet.getColumn(i + 1).width = 20; });
+    const slWidths = [30, 28, 14, 18, 16, 24];
+    slWidths.forEach((w, i) => { slSheet.getColumn(i + 1).width = w; });
   }
 
   // Download

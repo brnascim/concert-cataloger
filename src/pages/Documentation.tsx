@@ -7,16 +7,16 @@ import { useI18n } from '@/lib/i18n';
 export default function DocumentationPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [generated, setGenerated] = useState(false);
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const handleGenerate = () => {
-    const content = generateDocumentation();
+    const content = generateDocumentation(locale);
     setPreview(content);
     setGenerated(true);
   };
 
   const handleDownload = () => {
-    downloadDocumentation();
+    downloadDocumentation(locale);
   };
 
   const sections = [

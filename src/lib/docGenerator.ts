@@ -3,13 +3,23 @@
  * of the entire Setlist Agent codebase as a downloadable .txt file.
  */
 
-export function generateDocumentation(): string {
+import type { Locale } from './i18n';
+
+const DOC_TITLES: Record<string, { title: string; generated: string; filename: string }> = {
+  pt: { title: 'DOCUMENTAÇÃO TÉCNICA COMPLETA — SETLIST AGENT', generated: 'Gerado automaticamente em', filename: 'documentacao_tecnica_completa.txt' },
+  en: { title: 'COMPLETE TECHNICAL DOCUMENTATION — SETLIST AGENT', generated: 'Automatically generated on', filename: 'technical_documentation_complete.txt' },
+  es: { title: 'DOCUMENTACIÓN TÉCNICA COMPLETA — SETLIST AGENT', generated: 'Generado automáticamente en', filename: 'documentacion_tecnica_completa.txt' },
+  de: { title: 'VOLLSTÄNDIGE TECHNISCHE DOKUMENTATION — SETLIST AGENT', generated: 'Automatisch generiert am', filename: 'technische_dokumentation_vollstaendig.txt' },
+};
+
+export function generateDocumentation(locale: Locale = 'pt'): string {
   const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const titles = DOC_TITLES[locale] || DOC_TITLES.pt;
   
   return `
 ================================================================================
-  DOCUMENTAÇÃO TÉCNICA COMPLETA — SETLIST AGENT
-  Gerado automaticamente em: ${now}
+  ${titles.title}
+  ${titles.generated}: ${now}
 ================================================================================
 
 ================================================================================
@@ -1047,13 +1057,14 @@ export function generateDocumentation(): string {
 /**
  * Download the documentation as a .txt file.
  */
-export function downloadDocumentation(): void {
-  const content = generateDocumentation();
+export function downloadDocumentation(locale: Locale = 'pt'): void {
+  const content = generateDocumentation(locale);
+  const titles = DOC_TITLES[locale] || DOC_TITLES.pt;
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'documentacao_tecnica_completa.txt';
+  a.download = titles.filename;
   a.click();
   URL.revokeObjectURL(url);
 }
