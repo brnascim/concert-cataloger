@@ -14,36 +14,55 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Build compact data
-    const compactShows = shows.slice(0, 50).map((s: any, i: number) => ({
-      i, artist: s.artist, date: s.date, territory: s.territory,
-      city: s.city, venue: s.venue, sourceFile: s.sourceFile,
-    }));
-    const compactSetlists = setlists.slice(0, 20).map((sl: any) => ({
-      n: sl.number,
-      songs: sl.songs.slice(0, 50).map((s: any, i: number) => ({
-        i, title: s.songTitle, composers: s.composers,
-      })),
-    }));
+    // Extract folder context
+    const folders = new Set<string>();
+    for (const show of shows) {
+      if (show.sourceFile) {
+        const parts = show.sourceFile.replace(/\\/g, '/').split('/');
+        if (parts.length > 1) folders.add(parts[parts.length - 2]);
+      }
+    }
+
+    // Build artist-song mapping
+    const artistSongPairs: { artist: string; songs: { title: string; composers: string }[] }[] = [];
+    for (const show of shows) {
+      const setlist = setlists.find((sl: any) => sl.number === show.setListNumber);
+      if (setlist) {
+        artistSongPairs.push({
+          artist: show.artist,
+          songs: setlist.songs.slice(0, 50).map((s: any) => ({
+            title: s.songTitle,
+            composers: s.composers,
+          })),
+        });
+      }
+    }
 
     const systemPrompt = `You are a music catalog expert for BMG's live performance system.
-You receive show data and setlists. Your job is to generate a consolidated WORKS LIST.
+You receive show and setlist data. Generate a COMPLETE, DEDUPLICATED works list.
 
-For each unique song, provide:
-- songTitle: The correct, standardized song title
-- composers: The correct composer(s), separated by " / ". Use your knowledge of music to fill in missing composers.
-- artist: The performing artist
-- confidence: "high", "medium", or "low" for your composer attribution
-- source: Brief note on how you know (e.g., "Known BMG catalog", "ASCAP database", "Common attribution", "Inferred from context")
+YOUR MISSION: For every unique song, find the correct composers using your extensive music knowledge.
 
 RULES:
-- Deduplicate songs (same title by same artist = one entry)
-- Standardize titles (fix typos, capitalization)
-- For unknown composers, still provide your best guess with "low" confidence
-- Respond in the same language as the data
-- Return ONLY valid JSON
+1. DEDUPLICATE: Same song title by same artist = one entry. Merge variations (typos, case differences).
+2. STANDARDIZE TITLES: Fix typos, use proper capitalization, remove extra whitespace.
+3. COMPOSERS ARE CRITICAL:
+   - Use your training data to find correct composer(s) for every song
+   - Format: "Composer1 / Composer2" (separated by " / ")
+   - If the performing artist writes their own songs, include them as composer
+   - For covers, attribute to ORIGINAL songwriter(s)
+   - Check known BMG catalog, ASCAP, BMI, PRS registrations in your knowledge
+4. ARTIST: Use the performing artist (from folder name if available, otherwise from data)
+5. CONFIDENCE:
+   - "high": You're certain of the attribution (well-known song/composer)
+   - "medium": Likely correct based on common knowledge
+   - "low": Best guess, needs verification
+6. SOURCE: Brief explanation (e.g., "Known hit by [artist]", "Standard BMG catalog", "Common cover attribution")
 
-Response schema:
+CONTEXT: Folder names often represent the artist: ${Array.from(folders).join(', ') || 'No folder context'}
+
+Respond in the same language as the data.
+Return ONLY valid JSON:
 {
   "works": [
     {
@@ -57,7 +76,8 @@ Response schema:
   "summary": string
 }`;
 
-    const userPrompt = `Generate a consolidated works list from this data:\n\nSHOWS (${shows.length} total):\n${JSON.stringify(compactShows)}\n\nSETLISTS (${setlists.length} total):\n${JSON.stringify(compactSetlists)}\n\nReturn JSON works list.`;
+    const compactData = artistSongPairs.slice(0, 30);
+    const userPrompt = `Generate a consolidated works list from this data:\n\n${JSON.stringify(compactData)}\n\nFor EVERY song, find and suggest the correct composers. Return JSON.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -78,6 +98,11 @@ Response schema:
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again later." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add credits." }), {
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const t = await response.text();
