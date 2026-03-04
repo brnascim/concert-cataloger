@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { shows, setlists } = await req.json();
+    const { shows, setlists, locale = "pt" } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -61,7 +61,7 @@ RULES:
 
 CONTEXT: Folder names often represent the artist: ${Array.from(folders).join(', ') || 'No folder context'}
 
-Respond in the same language as the data.
+${locale === 'en' ? 'Respond ENTIRELY in English.' : locale === 'es' ? 'Responde COMPLETAMENTE en Español.' : locale === 'de' ? 'Antworte VOLLSTÄNDIG auf Deutsch.' : 'Responda INTEIRAMENTE em Português do Brasil.'}
 Return ONLY valid JSON:
 {
   "works": [

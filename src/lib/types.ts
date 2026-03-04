@@ -46,6 +46,8 @@ export interface ProcessedData {
   filesWithFailures: number;
   rejectedLines: number;
   fileStatuses: FileStatus[];
+  /** Raw text content of each file (keyed by filename) for AI context */
+  rawContents?: Record<string, string>;
 }
 
 export interface UploadedFile {

@@ -278,6 +278,7 @@ export async function processFiles(files: UploadedFile[]): Promise<ProcessedData
   const allSetlists: SetlistData[] = [];
   const allAlerts: string[] = [];
   const fileStatuses: FileStatus[] = [];
+  const rawContents: Record<string, string> = {};
   let setlistOffset = 0;
   let totalRejectedLines = 0;
 
@@ -298,6 +299,7 @@ export async function processFiles(files: UploadedFile[]): Promise<ProcessedData
           view[i] = file.content.charCodeAt(i) & 0xFF;
         }
         result = await parseXlsxContentAsync(buf, file.name);
+        // For XLSX, raw content is not useful as text
       } else if (isDocx) {
         const buf = new ArrayBuffer(file.content.length);
         const view = new Uint8Array(buf);
@@ -305,11 +307,15 @@ export async function processFiles(files: UploadedFile[]): Promise<ProcessedData
           view[i] = file.content.charCodeAt(i) & 0xFF;
         }
         const text = await extractDocxText(buf);
+        rawContents[file.name] = text;
         result = parseTxtContent(text, file.name);
       } else if (isRtf) {
         const text = extractRtfText(file.content);
+        rawContents[file.name] = text;
         result = parseTxtContent(text, file.name);
       } else {
+        // TXT, CSV — store raw content for AI context
+        rawContents[file.name] = file.content;
         result = parseTxtContent(file.content, file.name);
       }
     } catch (e) {
@@ -402,5 +408,6 @@ export async function processFiles(files: UploadedFile[]): Promise<ProcessedData
     filesWithFailures: fileStatuses.filter(f => f.status === 'failure').length,
     rejectedLines: totalRejectedLines,
     fileStatuses,
+    rawContents,
   };
 }
