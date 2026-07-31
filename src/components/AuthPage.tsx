@@ -46,7 +46,7 @@ export function AuthPage() {
       password,
       options: {
         data: { full_name: fullName },
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: window.location.origin + window.location.pathname + window.location.search,
       },
     });
     if (error) {
@@ -63,8 +63,13 @@ export function AuthPage() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+    // Preserve the current path (e.g. the OAuth consent screen) across the provider round-trip.
+    const returnTo =
+      window.location.pathname === '/'
+        ? window.location.origin
+        : window.location.origin + window.location.pathname + window.location.search;
     const { error } = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
+      redirect_uri: returnTo,
     });
     if (error) {
       toast({ title: t('googleLoginFailed'), description: String(error), variant: 'destructive' });
